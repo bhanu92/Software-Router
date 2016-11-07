@@ -1,5 +1,10 @@
 sr
 *.o
+.vim
+.vscode
+.ssh
+.cache
+.*.d
 .FIRST_TIME
 .bash_history
 .bashrc
