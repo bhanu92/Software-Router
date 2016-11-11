@@ -58,15 +58,14 @@ struct ospfv2_lsu_hdr
     uint8_t  unused;
     uint8_t  ttl;
     uint32_t num_adv;  /* number of advertisements */
-    struct ospfv2_lsu *head;
 }__attribute__ ((packed));
 
 struct ospfv2_lsu
 {
     uint32_t subnet; /* -- link subnet -- */
     uint32_t mask;   /* -- link subnet mask -- */
-    uint32_t rid;    /* -- attached router id (if any) -- */
-    struct ospfv2_lsu *next;
+    uint32_t rid; /* -- attached router id (if any) -- */
+    
 }__attribute__ ((packed));
 
 
