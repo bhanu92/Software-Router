@@ -36,6 +36,7 @@ struct ospf_neighbor
 	uint32_t rid;
 	uint32_t mask;
 	time_t rcv_time;
+	char *intf;
 	struct ospf_neighbor *next;
 };
 

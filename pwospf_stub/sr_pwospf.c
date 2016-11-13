@@ -21,12 +21,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netinet/ether.h>
+#include <string.h>
 
 /* -- declaration of main thread function for pwospf subsystem --- */
 static void* pwospf_run_thread(void* arg);
 void sr_send_lsu(void* arg);
 void sr_send_hello(void* arg);
 void sr_monitor_neighors(void *arg);
+char* get_interface(struct sr_instance *sr, uint32_t ip);
+char* get_mac_address(struct sr_instance *sr,char *intf)
 typedef struct ospfv2_lsu lsu_pkt;
 //void sr_add_to_advertisements(lsu_pkt *head,uint32_t subnet, uint32_t mask);
 typedef struct sr_ethernet_hdr ethernet_hdr;
@@ -72,7 +75,7 @@ int pwospf_init(struct sr_instance* sr)
 
     pthread_create(&hello_thread,NULL,&sr_send_hello,sr);
     pthread_create(&monitor_thread,NULL,&sr_monitor_neighors,sr);
-    pthread_create(&lsa_thread,NULL,&sr_send_lsu,sr);
+   // pthread_create(&lsa_thread,NULL,&sr_send_lsu,sr);
     return 0; /* success */
 } /* -- pwospf_init -- */
 
@@ -186,6 +189,7 @@ void sr_send_hello(void* arg)
 {
 	while(1)
 	{
+	//sleep(10);
 		if(!lock)
 		{
 			lock=true;
@@ -288,7 +292,7 @@ void handle_ospf_packet(struct sr_instance *sr, uint8_t *packet){
 			handle_hello_packet(sr,packet);
 	}
 	else if(ospfHdr->type==4){
-		printf("Received OSPF advertisement\n");
+		
 		handle_lsu_packet(sr,packet);
 	}
 }
@@ -314,17 +318,40 @@ void handle_lsu_packet(struct sr_instance *sr,uint8_t *packet)
 	lsu_hdr *lsuHdr = (lsu_hdr *)(packet + sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(ospf_hdr));
 	lsu_pkt *ads = (lsu_pkt *)(packet + sizeof(ethernet_hdr) + sizeof(ip_hdr) + sizeof(ospf_hdr) + sizeof(lsu_hdr));
 	assert(ads);
-	int i;
+	int i,j;
+	struct sr_if *iflist = sr->if_list;
+	
 	struct in_addr temp;
 	temp.s_addr = ipHdr->ip_src.s_addr;
-		printf("Advertisement from neighbor %s\n",inet_ntoa(temp));
-	for(i=0;i<3;i++)
+		printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
+				printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
+	
+	for(i=0;i<1;i++)
 	{
+		struct in_addr temp1;
+			temp1.s_addr = ads[i].mask;
+			
+		for(j=i+1;j<2;j++)
+		{
+			struct in_addr temp2;
+			temp2.s_addr = ads[j].mask;
+			
 		
-		temp.s_addr = ads[i].subnet;
-		printf("Subnet - %s\t",inet_ntoa(temp));
-		temp.s_addr = ads[i].mask;
-		printf("IP Mask - %s\t\n",inet_ntoa(temp));
+			//printf("Mask 1:%s\n",inet_ntoa(temp1));
+			//printf("Mask 2:%s\n",inet_ntoa(temp2));
+			temp.s_addr = ads[i].subnet;
+				printf("Subnet - %s\n",inet_ntoa(temp));
+			
+			if(ads[i].mask>ads[j].mask)
+			{
+				printf("Mask :%s\n",inet_ntoa(temp1));
+			}
+			else if(ads[i].mask<ads[j].mask)
+			{
+				printf("Mask :%s\n",inet_ntoa(temp2));
+			}
+		}
+		
 
 	}	
 }
@@ -341,6 +368,7 @@ void print_neighbors()
 		temp_ip.s_addr = temp->mask;
 		printf("Mask - %s\n",inet_ntoa(temp_ip));
 		printf("Received time - %s\n",ctime(&(temp->rcv_time)));
+		printf("Interface is %s\n",temp->intf);
 		printf("---------\n");
 		temp=temp->next;
 	}
@@ -361,6 +389,7 @@ void handle_hello_packet(struct sr_instance *sr,uint8_t *packet)
 		head->ip = ospfHdr->rid;
 		head->mask = helloHdr->nmask;
 		head->rcv_time = curr_time;
+		head->intf = get_interface(sr,ipHdr->ip_src.s_addr);
 		head->next = NULL;
 	}
 	else
@@ -373,6 +402,7 @@ void handle_hello_packet(struct sr_instance *sr,uint8_t *packet)
 			temp->next->ip = ospfHdr->rid;
 			temp->next->mask = helloHdr->nmask;
 			temp->next->rcv_time = curr_time;
+			temp->next->intf = get_interface(sr,ipHdr->ip_src.s_addr);
 			temp->next->next = NULL;
 		}
 		else
@@ -394,7 +424,23 @@ void handle_hello_packet(struct sr_instance *sr,uint8_t *packet)
 }
 
 
+char* get_interface(struct sr_instance *sr, uint32_t ip)
+{
+	struct sr_if *iflist = sr->if_list;
+	int max=0;
+	char *intf;
+	while(iflist)
+	{	
+		if((iflist->ip & ip)>max)
+		{
+			max= iflist->ip & ip;
+			intf = iflist->name;
+		}
+		iflist=iflist->next;
+	}
 
+	return intf;
+}
 
 void sr_send_lsu(void* arg)
 {
@@ -443,57 +489,31 @@ void sr_send_lsu(void* arg)
 		    seqnum++;
 		    lsuhdr->seq = seqnum;
 		    iphdr->ip_sum = 0;
-		    
-		    while(iflist)
-			{
-				lsu_pkt *ads=(lsu_pkt *)malloc(3*sizeof(lsu_pkt));
-				temp = head;
-				j=0;
-			    while(temp)
-			    {	
-				
-				
-			
-					iphdr->ip_src.s_addr = iflist->ip;	
-		
-
-				    	ospfhdr->rid = iflist->ip;
-				    	iphdr->ip_dst.s_addr = temp->ip;
-		
-					uint32_t subnet = (temp->ip)&(iflist->ip);
-					uint32_t default_mask = 0xffffffff;
-				 	uint32_t mask = ((temp->ip)^(iflist->ip))^default_mask;
-					
-				 		
-				 	lsu_pkt ad;
-					ad.subnet = subnet;
-					ad.mask = mask;
-					ad.rid = temp->rid;
-					ads[j++]=ad;
-
-					
-				temp = temp->next;
-				 
-				
-			     }
-			     printf("Sending below ads..\n");
-			     for(i=0;i<3;i++){
-			     	struct in_addr temp1;
-					temp1.s_addr = ads[i].subnet;
-					printf("Subnet - %s\t",inet_ntoa(temp1));
-					temp1.s_addr = ads[i].mask;
-					printf("Mask - %s\n",inet_ntoa(temp1));
-					temp1.s_addr = iflist->ip;
-					printf("IP Address of router %s\n",inet_ntoa(temp1));
-					temp1.s_addr = ads[i].rid;
-					printf("IP address of neighbor %s\n",inet_ntoa(temp1));
-			     }
-				for (i = 0; i < ETHER_ADDR_LEN; i++)
-					{
-						ethhdr->ether_shost[i] = iflist->addr[i];
-					}
-					     printf("Address and interface -%s \t%s\n",ether_ntoa(iflist->addr),iflist->name);
-					     iphdr->ip_sum = packet_checksum((uint16_t*)iphdr, sizeof(struct ip));
+		    lsu_pkt *ads=(lsu_pkt *)malloc(3*sizeof(lsu_pkt));
+		   while(temp)
+		   {
+			uint32_t router_ip = get_router_ip(sr,temp->intf);
+			uint32_t subnet = temp->ip & router_ip;
+			uint32_t default_mask = 0xffffffff;
+			uint32_t mask = ((temp->ip)^router_ip))^default_mask;
+			uint32_t rid = temp->ip;
+		   	lsu_pkt ad;
+			ad.subnet = subnet;
+			ad.mask = mask;
+			ad.rid = temp->rid;
+			ads[j++]=ad;					
+			temp = temp->next;
+		   }
+		   temp = head;
+		   while(temp)
+		   {
+		   	iphdr->ip_dst.s_addr = temp->ip;
+		   	iphdr->ip_src.s_addr = get_router_ip(sr,temp->intf);
+		   	
+						
+			ethhdr->ether_shost = get_mac_address(sr,temp->intf);
+						
+		   	 iphdr->ip_sum = packet_checksum((uint16_t*)iphdr, sizeof(struct ip));
 					     ospfhdr->csum = packet_checksum((uint16_t *)ospfhdr, sizeof(struct ospfv2_hdr));
 					     
 			    // lsuhdr->ads = ads;
@@ -508,21 +528,51 @@ void sr_send_lsu(void* arg)
 								lsuhdr, sizeof(struct ospfv2_lsu_hdr));
 	memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr), 
 								ads, 3*sizeof(lsu_pkt));
-					char *intf = iflist->name;
-					printf("Interface is %s\n",intf);
+					
 
-					sr_send_packet(sr,pkt,sizeof(struct sr_ethernet_hdr)+sizeof(struct ip)+sizeof(struct ospfv2_hdr)+sizeof(struct ospfv2_lsu_hdr)+3*sizeof(lsu_pkt),intf);
+					sr_send_packet(sr,pkt,sizeof(struct sr_ethernet_hdr)+sizeof(struct ip)+sizeof(struct ospfv2_hdr)+sizeof(struct ospfv2_lsu_hdr)+3*sizeof(lsu_pkt),temp->intf);
 					printf("Finished sending LSA\n");
 					free(pkt);
-
 				
-			    iflist = iflist->next;
-			}
-			sleep(30);
+					temp=temp->next;
+			
+		   }
+		   free(ads);
+		   
 		}
+		sleep(20);
 	}
+	
+	
 }
 
+uint32_t get_router_ip(struct sr_instance *sr,char *intf)
+{
+	struct sr_if *iflist = sr->if_list;
+	while(iflist)
+	{
+		if(strcmp(iflist->name,intf)==0)
+		{
+			return iflist->ip;
+		}
+		iflist=iflist->next;
+	}
+	return 1;
+}
+
+char* get_mac_address(struct sr_instance *sr,char *intf)
+{
+	struct sr_if *iflist = sr->if_list;
+	while(iflist)
+	{
+		if(strcmp(iflist->name,intf)==0)
+		{
+			return iflist->addr;
+		}
+		iflist=iflist->next;
+	}
+	return NULL;
+}
 /*void sr_add_to_advertisements(lsu_pkt *lsu_head,uint32_t subnet, uint32_t mask)
 {
 	if(lsu_head==NULL)

@@ -417,6 +417,7 @@ void sr_handlepacket(struct sr_instance* sr,
 		struct sr_if* interfs = sr->if_list;
 
 		if(ipHdr->ip_p==89){
+		
 			//handle OSPF packets
 			printf("Handling OSPF packet\n");
 			handle_ospf_packet(sr,packet);
