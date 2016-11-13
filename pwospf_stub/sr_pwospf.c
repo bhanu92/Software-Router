@@ -12,6 +12,7 @@
 #include "pwospf_protocol.h"
 #include "sr_protocol.h"
 #include "sr_if.h"
+#include "sr_topology.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -44,6 +45,7 @@ static int seqnum = 0;
 neighbor *head = NULL;
 pthread_mutex_t neighbor_t;
 bool lock = false;
+
 
 /*---------------------------------------------------------------------
  * Method: pwospf_init(..)
@@ -119,7 +121,7 @@ void sr_monitor_neighors(void *arg)
 			{
 				time_t pkt_time = temp->rcv_time;
 				double diff = difftime(currTime, pkt_time);
-				if (diff > OSPF_NEIGHBOR_TIMEOUT)
+				if (diff > OSPF_NEIGHBOR_TIMEOUT && temp->rid!=0)
 				{
 					temp->rid = 0;
 
@@ -337,9 +339,31 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet)
 		printf("Mask : %s\n", inet_ntoa(temp));
 		temp.s_addr = ads[i].rid;
 		printf("RID : %s\n",inet_ntoa(temp));
+		
+		temp.s_addr = ipHdr->ip_src.s_addr;
+		printf("NID : %s\n",inet_ntoa(temp));
 		printf("***************\n");
+		
+		if(check_topology_entry(ads[i].subnet,ipHdr->ip_src.s_addr))
+		{
+			uint16_t seqNum = get_sequence_number(ads[i].subnet,ipHdr->ip_src.s_addr);
+			if(seqNum<=seqnum)
+			{
+				printf("Sequence number is same as existing database. No update required\n");
+			}
+			else
+			{
+				printf("Sequence number is greater. Will update\n");
+			}
+		}
+		else
+		{
+			printf("Adding entry to topology database\n");
+			add_topology_entry(ads[i].rid,ads[i].subnet,ads[i].mask,ipHdr->ip_src.s_addr,lsuHdr->seq);
+		}
 
 	}
+	print_topology();
 }
 
 void print_neighbors()
@@ -357,6 +381,7 @@ void print_neighbors()
 		printf("Interface is %s\n", temp->intf);
 		printf("---------\n");
 		temp = temp->next;
+		
 	}
 }
 
