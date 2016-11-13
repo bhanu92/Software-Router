@@ -335,7 +335,9 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet)
 		printf("Subnet : %s\n", inet_ntoa(temp));
 		temp.s_addr = ads[i].mask;
 		printf("Mask : %s\n", inet_ntoa(temp));
-		printf("***************");
+		temp.s_addr = ads[i].rid;
+		printf("RID : %s\n",inet_ntoa(temp));
+		printf("***************\n");
 
 	}
 }
@@ -374,6 +376,7 @@ void handle_hello_packet(struct sr_instance *sr, uint8_t *packet)
 		head->mask = helloHdr->nmask;
 		head->rcv_time = curr_time;
 		head->intf = get_interface(sr, ipHdr->ip_src.s_addr);
+		head->rid = ipHdr->ip_src.s_addr;
 		head->next = NULL;
 	}
 	else
@@ -387,6 +390,7 @@ void handle_hello_packet(struct sr_instance *sr, uint8_t *packet)
 			temp->next->mask = helloHdr->nmask;
 			temp->next->rcv_time = curr_time;
 			temp->next->intf = get_interface(sr, ipHdr->ip_src.s_addr);
+			temp->next->rid = ipHdr->ip_src.s_addr;
 			temp->next->next = NULL;
 		}
 		else
@@ -535,7 +539,7 @@ void sr_send_lsu(void* arg)
 				{
 					uint32_t router_ip = get_router_ip(sr, temp->intf);
 					uint32_t subnet = temp->ip & router_ip;
-					uint32_t mask = 0xfffffffe;
+					uint32_t mask = htonl(0xfffffffe);
 				//	uint32_t mask = ((temp->ip)^router_ip)^default_mask;
 					uint32_t rid = 0;
 					
