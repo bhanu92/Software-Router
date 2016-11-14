@@ -8,6 +8,7 @@
 #include "sr_if.h"
 #include "pwospf_protocol.h"
 #include "sr_protocol.h"
+#include "sr_rt.h"
 
 struct ospfv2_topo_entry
 {
@@ -27,4 +28,10 @@ void remove_topology_entry(uint32_t,uint32_t);
 bool check_topology_entry(uint32_t,uint32_t);
 uint16_t get_sequence_number(uint32_t,uint32_t);
 void print_topology();
-
+void update_routing_table(struct sr_instance*);
+void add_entry_to_routing_table(struct sr_instance *sr,uint32_t dest_prefix,uint32_t next_hop,uint32_t mask,char *intf);
+bool check_interface_in_routing_table(struct sr_instance *sr,char *intf);
+bool check_routing_table(struct sr_instance *sr,uint32_t dest_prefix,uint32_t next_hop);
+char* fetch_interface_for_destination(struct sr_instance *sr,uint32_t dest);
+void print_routing_table(struct sr_instance *sr);
+bool check_router_interfaces(struct sr_instance *sr, uint32_t ip);

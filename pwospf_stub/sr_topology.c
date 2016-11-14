@@ -88,7 +88,6 @@ void print_topology()
 		//printf("Test\n");
 		temp1=temp->router_id;
 		printf("%s\t",inet_ntoa(temp1));
-		printf("\t");
 		temp1=temp->next_hop;
 		printf("%s\t",inet_ntoa(temp1));
 		temp1=temp->net_mask;
@@ -102,3 +101,144 @@ void print_topology()
 
 }
 
+void update_routing_table(struct sr_instance *sr)
+{
+	printf("Updating Routing table\n");
+	top_entry *temp = top_head;
+	struct sr_if *iflist = sr->if_list;
+	while(temp)
+	{
+		char *intf = fetch_interface_for_destination(sr,temp->router_id.s_addr);
+		printf("Found Interface %s\n",intf);
+		if(intf && !check_routing_table(sr,temp->net_prefix.s_addr,temp->next_hop.s_addr) && !check_router_interfaces(sr,temp->router_id.s_addr)){
+			printf("Adding entry to routing table\n");
+			add_entry_to_routing_table(sr,temp->net_prefix.s_addr,temp->next_hop.s_addr,temp->net_mask.s_addr,intf);
+		}
+		temp=temp->next;
+	}
+	while(iflist)
+	{
+		bool existsInRoutingTable = check_interface_in_routing_table(sr,iflist->name);
+		if(!existsInRoutingTable)
+			break;
+		iflist=iflist->next;
+	}
+	if(iflist)
+		add_entry_to_routing_table(sr,0,iflist->ip,0,iflist->name);
+}
+
+char* fetch_interface_for_destination(struct sr_instance *sr,uint32_t dest)
+{
+	if(dest==0)
+	return NULL;
+	struct sr_if *iflist = sr->if_list;
+	struct in_addr temp1;
+	temp1.s_addr = dest;
+	printf("Fetching interface for %s\n",inet_ntoa(temp1));
+	uint32_t max = 0;
+	char *longestMatch;
+	while(iflist)
+	{
+		uint32_t val = iflist->ip & dest;
+		if(val>max){
+			max=val;
+			longestMatch=iflist->name;
+		}
+		iflist=iflist->next;
+	}
+
+	return longestMatch;
+}
+
+void add_entry_to_routing_table(struct sr_instance *sr,uint32_t dest_prefix,uint32_t next_hop,uint32_t mask,char *intf)
+{
+	struct sr_rt *routing_table = sr->routing_table;
+	int i;
+	if(sr->routing_table==NULL)
+	{
+		printf("Routing table is empty.Adding\n");
+		sr->routing_table=malloc(sizeof(struct sr_rt));
+		sr->routing_table->dest.s_addr = dest_prefix;
+		sr->routing_table->gw.s_addr = next_hop;
+		sr->routing_table->mask.s_addr = mask;
+		for(i=0;i<4;i++)
+			sr->routing_table->interface[i]=intf[i];
+		sr->routing_table->next=NULL;
+	}
+	else
+	{
+		while(routing_table->next)
+				routing_table=routing_table->next;
+			routing_table->next=malloc(sizeof(struct sr_rt));
+		routing_table->next->dest.s_addr = dest_prefix;
+		routing_table->next->gw.s_addr = next_hop;
+		routing_table->next->mask.s_addr = mask;
+		for(i=0;i<4;i++)
+			routing_table->next->interface[i]=intf[i];
+		routing_table->next->next=NULL;
+	}
+
+}
+
+bool check_routing_table(struct sr_instance *sr,uint32_t dest_prefix,uint32_t next_hop)
+{
+	struct sr_rt *routing_table=sr->routing_table;
+	while(routing_table)
+	{
+			if(routing_table->dest.s_addr==dest_prefix && routing_table->gw.s_addr==next_hop){
+				printf("Already exists in routing table\n");
+				return true;
+			}
+			routing_table=routing_table->next;
+	}
+	return false;
+}
+
+bool check_router_interfaces(struct sr_instance *sr, uint32_t ip)
+{
+	struct sr_if *iflist = sr->if_list;
+
+	while(iflist)
+	{
+		if(iflist->ip == ip && ip!=0){
+			printf("Destination is router itself. So excluding\n");
+			return true;
+		}
+		iflist = iflist->next;
+	}
+
+	return false;
+
+}
+
+bool check_interface_in_routing_table(struct sr_instance *sr,char *intf)
+{
+	struct sr_rt *routing_table=sr->routing_table;
+	while(routing_table)
+	{
+		if(strcmp(routing_table->interface,intf)==0)
+			return true;
+		routing_table=routing_table->next;
+	}
+	return false;
+}
+
+void print_routing_table(struct sr_instance *sr)
+{
+
+	struct sr_rt *routing_table=sr->routing_table;
+	int i;
+	printf("DST\t\tGW\t\tMASK\t\tINTF\n");
+	while(routing_table)
+	{
+		struct in_addr temp;
+		temp= routing_table->dest;
+		printf("%s\t", inet_ntoa(temp));
+		temp = routing_table->gw;
+		printf("%s\t", inet_ntoa(temp));
+		temp = routing_table->mask;
+		printf("%s\t", inet_ntoa(temp));
+		printf("%s\t\n", routing_table->interface);
+		routing_table = routing_table->next;
+	}
+}

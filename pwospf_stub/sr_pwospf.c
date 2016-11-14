@@ -364,6 +364,8 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet)
 
 	}
 	print_topology();
+	update_routing_table(sr);
+	print_routing_table(sr);
 }
 
 void print_neighbors()
@@ -522,6 +524,7 @@ void sr_send_lsu(void* arg)
 
 			iphdr->ip_hl = 5;
 			iphdr->ip_tos = 0;
+
 			iphdr->ip_off = IP_DF;
 			iphdr->ip_id = rand();
 			iphdr->ip_ttl = 64;
@@ -544,6 +547,9 @@ void sr_send_lsu(void* arg)
 			lsuhdr->seq = seqnum;
 			iphdr->ip_sum = 0;
 			lsu_pkt *ads = (lsu_pkt *)malloc(3 * sizeof(lsu_pkt));
+			uint8_t *pkt = (uint8_t *)malloc(sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + 
+					sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
+				                                 (sizeof(struct ospfv2_lsu) * 3));
 			while (temp)
 			{
 				lsu_pkt ad;
@@ -591,9 +597,7 @@ void sr_send_lsu(void* arg)
 				ospfhdr->csum = packet_checksum((uint16_t *)ospfhdr, sizeof(struct ospfv2_hdr));
 
 				// lsuhdr->ads = ads;
-				uint8_t *pkt = (uint8_t *)malloc(sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + 
-					sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
-				                                 (sizeof(struct ospfv2_lsu) * 3));
+				
 
 				memcpy(pkt, ethhdr, sizeof(struct sr_ethernet_hdr));
 				memcpy(pkt + sizeof(struct sr_ethernet_hdr), iphdr, sizeof(struct ip));
@@ -609,13 +613,13 @@ void sr_send_lsu(void* arg)
 				sr_send_packet(sr, pkt, sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) +
 				 sizeof(struct ospfv2_lsu_hdr) + 3 * sizeof(lsu_pkt), temp->intf);
 				printf("Finished sending LSA\n");
-				free(pkt);
+				
 
 				temp = temp->next;
 
 			}
 			free(ads);
-
+			free(pkt);
 		}
 		sleep(20);
 	}
