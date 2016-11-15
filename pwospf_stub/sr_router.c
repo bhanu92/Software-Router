@@ -161,48 +161,48 @@ void sr_send_cachedpacket( uint32_t ipPacket) {
 	uint8_t* temp_pkt;
 	struct sr_rt* req_iface;
 	struct ip* ipHdr;
-	uint32_t longestMatch=0;
+	uint32_t longestMatch = 0;
 	while (reqPacket->next) {
-		
-		reqPacket=reqPacket->next;
+
+		reqPacket = reqPacket->next;
 	}
-	
-	ipHdr= (struct ip *)(reqPacket->pkt + sizeof(struct sr_ethernet_hdr));
+
+	ipHdr = (struct ip *)(reqPacket->pkt + sizeof(struct sr_ethernet_hdr));
 	req_iface = get_interface_from_rt(ipHdr->ip_dst.s_addr, reqPacket->sr_inst);
 	//printf("Got packet from queue\n");
-	printf("Got last packet from queue and sending through %s\n",req_iface->interface);
-	if(reqPacket==NULL){
+	printf("Got last packet from queue and sending through %s\n", req_iface->interface);
+	if (reqPacket == NULL) {
 		reqPacket = front;
-		while(reqPacket!=NULL){
-			if(reqPacket->sent==false){
-				send_default_route(reqPacket->pkt,reqPacket->sr_inst,reqPacket->length);
-				reqPacket->sent=true;
+		while (reqPacket != NULL) {
+			if (reqPacket->sent == false) {
+				send_default_route(reqPacket->pkt, reqPacket->sr_inst, reqPacket->length);
+				reqPacket->sent = true;
 				return;
 			}
-			reqPacket=reqPacket->next;
+			reqPacket = reqPacket->next;
 		}
 	}
 	else
 	{
-	//print_interface(req_iface);
-			if (req_iface == NULL)
-			{
-				printf("Going to default route\n");
-				if (reqPacket){
-					send_default_route(reqPacket->pkt, reqPacket->sr_inst, reqPacket->length);
-					reqPacket->sent = true;
-				}
+		//print_interface(req_iface);
+		if (req_iface == NULL)
+		{
+			printf("Going to default route\n");
+			if (reqPacket) {
+				send_default_route(reqPacket->pkt, reqPacket->sr_inst, reqPacket->length);
+				reqPacket->sent = true;
 			}
-			else
-			{
-				printf("\nROuting the Cached Packet\n");
-				if (reqPacket){
-					sr_route_packet(reqPacket->sr_inst, reqPacket->pkt, reqPacket->length, req_iface->interface);
-					reqPacket->sent=true;
-				}
-			}
-			printf("Route packet successful\n");
 		}
+		else
+		{
+			printf("\nROuting the Cached Packet\n");
+			if (reqPacket) {
+				sr_route_packet(reqPacket->sr_inst, reqPacket->pkt, reqPacket->length, req_iface->interface);
+				reqPacket->sent = true;
+			}
+		}
+		printf("Route packet successful\n");
+	}
 }
 
 void print_interface(struct sr_rt *rt)
@@ -274,9 +274,8 @@ unsigned char* get_mac_addr_cache(uint32_t ipAddr) {
 
 
 void arp_cache(struct sr_arphdr* arpHdr ) {
-	printf("Caching node\n");
+	printf("Caching MAC Address\n");
 	bool existsInCache = check_arp_cache(arpHdr->ar_sip);
-	printf("Caching node\n");
 	if (!existsInCache)
 	{
 		struct cache_node* temp = (struct cache_node*)malloc(sizeof(struct cache_node));
@@ -370,24 +369,23 @@ void sr_handlepacket(struct sr_instance* sr,
 
 	printf("\n*** -> Received packet of length %d \n", len);
 	struct sr_ethernet_hdr *ethHdr = (struct sr_ethernet_hdr*)packet;
-	
+
 	if (ntohs(ethHdr->ether_type) == ETHERTYPE_ARP) {
 		printf(" \n ether dhost %s\n", ether_ntoa(ethHdr->ether_dhost));
 		struct sr_arphdr *arpHdr = (struct sr_arphdr*)(packet + sizeof(struct sr_ethernet_hdr));
 
 		if (arpHdr->ar_op == ntohs(ARP_REQUEST)) {
-		
+
 			struct in_addr dstIP, srcIP;
 			dstIP.s_addr = arpHdr->ar_tip;
 			srcIP.s_addr = arpHdr->ar_sip;
-			printf("\nReceived ARP request from source IP address: %s", inet_ntoa(srcIP));
-			/*printf("\nReceived destination IP address: %s", inet_ntoa(dstIP));
-			Debug("\nTarget Hardware address\n");
-			DebugMAC(ethHdr->ether_dhost);*/
-			Debug("\nsender Hardware address\n");
+			printf("******************************************\n");
+			printf("Received ARP request from source IP address: %s\n", inet_ntoa(srcIP));
+			Debug("Sender MAC address: ");
 			DebugMAC(arpHdr->ar_sha);
-			arp_cache(arpHdr);
 			printf("\n");
+			printf("******************************************\n");
+			arp_cache(arpHdr);
 			//print_arp_cache();
 			sr_arp_reply(sr, packet, len, interface); // Function to reply for the arp request
 		}
@@ -396,10 +394,12 @@ void sr_handlepacket(struct sr_instance* sr,
 			struct in_addr dstIP, srcIP;
 			dstIP.s_addr = arpHdr->ar_tip;
 			srcIP.s_addr = arpHdr->ar_sip;
-			printf("\nReceived ARP reply from the server\n");
-			printf( " The MAC address of the server: ");
+			printf("******************************************\n");
+			printf("Received ARP reply from the server\n");
+			printf( "The MAC address of the server: ");
 			DebugMAC(ethHdr->ether_shost);
 			printf("\n");
+			printf("******************************************\n");
 			arp_cache(arpHdr);
 			//print_arp_cache();
 			sr_send_cachedpacket(arpHdr->ar_sip);
@@ -413,24 +413,28 @@ void sr_handlepacket(struct sr_instance* sr,
 
 		struct ip *ipHdr = (struct ip*)(packet + sizeof(struct sr_ethernet_hdr));
 		struct sr_if* interfs = sr->if_list;
+		printf("******************************************\n");
 		printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
-				printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
-		if(ipHdr->ip_p==89){
-		
+		printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
+		printf("******************************************\n");
+		if (ipHdr->ip_p == 89) {
+
 			//handle OSPF packets
 			printf("Handling OSPF packet\n");
-			handle_ospf_packet(sr,packet);
+			handle_ospf_packet(sr, packet);
 			return;
 		}
 		if (ipHdr->ip_p == 1) {
 			struct sr_icmp_hdr *icmpHdr = (struct sr_icmp_hdr *)(packet + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip));
 			if (icmpHdr->icmp_type == 0) {
+				printf("******************************************\n");
 				printf("ECHO reply\n");
 				printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
 				printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
+				printf("******************************************\n");
 			}
 			else if ((icmpHdr->icmp_type == 3) && (icmpHdr->icmp_code == 3) ) {
-				printf("\nforwarding the ICMP time exceeded msg received frm server\n");
+				printf("\nForwarding the ICMP time exceeded msg received frm server\n");
 				send_default_route(packet, sr, len);
 				return;
 			}
@@ -523,10 +527,11 @@ void sr_send_icmp(struct sr_instance * sr, uint8_t* packet, unsigned int len, ui
 
 	sr_send_packet(sr, icmpPacket, 70, "eth0");
 
-
+	printf("******************************************\n");
 	printf("Destination MAC address of ICMP packet %s\n", ether_ntoa(send_ethHdr->ether_dhost));
 	printf("Source MAC address of ICMP packet%s\n", ether_ntoa(send_ethHdr->ether_shost));
 	printf("Creating and Forwarding the ICMP packet\n");
+	printf("******************************************\n");
 
 	free(icmpPacket);
 }
@@ -540,10 +545,10 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 	struct sr_ethernet_hdr* ethHdr = (struct sr_ethernet_hdr*)packet;
 	struct ip *ipHdr = (struct ip*)(packet + sizeof(struct sr_ethernet_hdr));
 	unsigned char mac_addr[6];
-	struct sr_rt *rTable = get_interface_from_rt(ipHdr->ip_dst.s_addr,sr);
-	if(check_arp_cache(ipHdr->ip_dst.s_addr) == true)
+	struct sr_rt *rTable = get_interface_from_rt(ipHdr->ip_dst.s_addr, sr);
+	if (check_arp_cache(ipHdr->ip_dst.s_addr) == true)
 	{
-		
+
 		int i;
 		if (ipHdr->ip_p == 1) {
 			struct sr_icmp_hdr *icmpHdr = (struct sr_icmp_hdr*)(packet + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip));
@@ -574,7 +579,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 
 
 		}
-		
+
 		struct cache_node *temp = head_cache;
 		while (temp) {
 			if (temp->ip_addr == ipHdr->ip_dst.s_addr)
@@ -612,11 +617,11 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			ipHdr->ip_ttl = ipHdr->ip_ttl - 1;
 		ipHdr->ip_sum = 0;
 		ipHdr->ip_sum = packet_checksum((uint16_t*)ipHdr, 20);
-		printf("Length of packet to be sent is\n",len);
+		printf("Length of packet to be sent is\n", len);
 		//ipHdr->ip_sum=checksum_compute((uint16_t*) ipHdr, 32);
 		sr_send_packet(sr, packet, len, interface);
 	}
-	else if (rTable && rTable->dest.s_addr!=0 && check_arp_cache(rTable->gw.s_addr) == true) {
+	else if (rTable && rTable->dest.s_addr != 0 && check_arp_cache(rTable->gw.s_addr) == true) {
 		//  mac_addr = get_mac_addr_cache(ipHdr->ip_dst.s_addr);
 		int i;
 		if (ipHdr->ip_p == 1) {
@@ -648,7 +653,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 
 
 		}
-		
+
 		struct cache_node *temp = head_cache;
 		while (temp) {
 			if (temp->ip_addr == rTable->gw.s_addr)
@@ -686,15 +691,15 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			ipHdr->ip_ttl = ipHdr->ip_ttl - 1;
 		ipHdr->ip_sum = 0;
 		ipHdr->ip_sum = packet_checksum((uint16_t*)ipHdr, 20);
-		printf("Length of packet to be sent is\n",len);
+		printf("Length of packet to be sent is\n", len);
 		//ipHdr->ip_sum=checksum_compute((uint16_t*) ipHdr, 32);
 		sr_send_packet(sr, packet, len, interface);
 	}
-	
+
 	else {
 		enqueue(packet, sr, len);
-		struct sr_rt *rtable = get_interface_from_rt(ipHdr->ip_dst.s_addr,sr);
-		if(rtable->dest.s_addr!=0)
+		struct sr_rt *rtable = get_interface_from_rt(ipHdr->ip_dst.s_addr, sr);
+		if (rtable->dest.s_addr != 0)
 			sr_arp_request(sr, packet, rtable->interface, rtable->gw.s_addr, len);
 		else
 			sr_arp_request(sr, packet, rtable->interface, ipHdr->ip_dst.s_addr, len);
@@ -755,15 +760,13 @@ void sr_arp_reply(struct sr_instance * sr, uint8_t * packet, unsigned int len, c
 	struct in_addr sip, tip;
 	sip.s_addr = arpReply->ar_sip;
 	tip.s_addr = arpReply->ar_tip;
-	printf("\n\nSending ARP reply to the browser \n\n");
+	printf("******************************************\n");
+	printf("Sending ARP reply to the browser\n");
+	printf("Src IP: %s, Dst IP: %s\n",inet_ntoa(sip), inet_ntoa(tip));
+	printf("Src MAC: %s, Dst MAC: %s\n",ether_ntoa(arpReply->ar_sha),ether_ntoa(arpReply->ar_tha));
+	printf("Sending ARP reply from Interface %s\n",interface);
+	printf("******************************************\n");
 
-	/*printf("sender IP address %s\n" , inet_ntoa(sip));
-	printf("Destination IP address %s\n", inet_ntoa(tip));
-	printf("Hardware Address of sender ");
-	DebugMAC(arpReply->ar_sha);
-	printf("\n");
-	printf("Hardware address of destination ");
-	DebugMAC(arpReply->ar_tha); */
 	sr_send_packet(sr, packet, len, interface); // calling the send packet function from sr_router.h
 }
 
@@ -776,9 +779,9 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 	assert(interface);
 
 	arp_request_count++;
-	struct ip* temp_ip =(struct ip*)(pkt + 14);
+	struct ip* temp_ip = (struct ip*)(pkt + 14);
 
-	if (arp_request_count > 5 && temp_ip!=NULL &&temp_ip->ip_p!=17 ) {
+	if (arp_request_count > 5 && temp_ip != NULL && temp_ip->ip_p != 17 ) {
 		dequeue();
 		sr_send_icmp(sr, pkt, length , 3, 1);
 		arp_request_count = 0;
@@ -808,8 +811,6 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 				ethHdr->ether_dhost[i] = 255;
 			}
 
-
-
 			struct sr_if* req_iface = sr->if_list;
 			while (req_iface)
 			{
@@ -817,24 +818,17 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 				{
 					break;
 				}
-
 				req_iface = req_iface->next;
 			}
 
 			for (i = 0; i < ETHER_ADDR_LEN; i++) {
-				//ethHdr->ether_shost[j] = req_iface->addr[j];
+
 				arpHdr->ar_sha[i] = req_iface->addr[i];
 			}
-			//printf("\nRouter Hardware address in ARP header");
-			//DebugMAC(arpHdr->ar_sha);
+
 			memcpy(ethHdr->ether_shost, req_iface->addr, sizeof(req_iface->addr));
-			//memcpy(arpHdr->ar_sha, req_iface->addr, sizeof(req_iface->addr));
-			//printf("\nRouter Hardware address in ethernet header");
-			//DebugMAC(ethHdr->ether_shost);
 			arpHdr->ar_sip = req_iface->ip;
 			struct in_addr temp;
-			//temp.s_addr = arpHdr->ar_sip;
-			//printf("\nRouter IP adress %s", inet_ntoa(temp));
 			temp.s_addr = arpHdr->ar_tip;
 			printf("\nSending ARP request to the Server %s from interface %s\n", inet_ntoa(temp), interface);
 			sr_send_packet(sr, (uint8_t*)ethHdr, len, req_iface->name);
@@ -848,36 +842,36 @@ struct sr_rt* get_interface_from_rt(uint32_t dest, struct sr_instance * sr) {
 	struct sr_rt *routing_table = sr->routing_table;
 	struct in_addr temp;
 	temp.s_addr = dest;
-	uint32_t max=0;
+	uint32_t max = 0;
 	struct sr_rt* maxRt;
 
 	//printf("Actual dest is %s\n", inet_ntoa(temp));
 	while (routing_table)
 	{
-		
-		
-			uint32_t res = dest & routing_table->gw.s_addr;
-			temp.s_addr = (dest ^ (routing_table->gw.s_addr)) ^ 0xffffffff;
-			
-			char *ip = inet_ntoa(temp);
-			//printf("AND operation is %s\n",ip);
-			if(strstr(ip,"255.255.255") != NULL)
-			{
-				//printf("NOT NULL\n");
-				if(res>max){
-					max=res;
-					maxRt = routing_table;
-				}
+
+
+		uint32_t res = dest & routing_table->gw.s_addr;
+		temp.s_addr = (dest ^ (routing_table->gw.s_addr)) ^ 0xffffffff;
+
+		char *ip = inet_ntoa(temp);
+		//printf("AND operation is %s\n",ip);
+		if (strstr(ip, "255.255.255") != NULL)
+		{
+			//printf("NOT NULL\n");
+			if (res > max) {
+				max = res;
+				maxRt = routing_table;
 			}
-			else{
-				return NULL;
-			}
-			
-		
+		}
+		else {
+			return NULL;
+		}
+
+
 		routing_table = routing_table->next;
 	}
 
-	
+
 	return maxRt;
 }
 
@@ -956,8 +950,10 @@ void send_default_route(uint8_t *packet, struct sr_instance * sr, int len) {
 	ipHdr->ip_sum = 0;
 	ipHdr->ip_sum = packet_checksum((uint16_t*)ipHdr, 20);
 	//ipHdr->ip_sum=checksum_compute((uint16_t*) ipHdr, 32);
+	printf("******************************************\n");
 	printf("Destination gateway MAC address %s\n", ether_ntoa(ethHdr->ether_dhost));
 	printf("Source gateway MAC address %s\n", ether_ntoa(ethHdr->ether_shost));
+	printf("******************************************\n");
 	sr_send_packet(sr, packet, len, interface);
 
 
