@@ -161,18 +161,16 @@ void sr_send_cachedpacket( uint32_t ipPacket) {
 	uint8_t* temp_pkt;
 	struct sr_rt* req_iface;
 	struct ip* ipHdr;
-
-	while (reqPacket != NULL) {
-		temp_pkt = reqPacket->pkt;
-		ipHdr = (struct ip*)(temp_pkt + sizeof(struct sr_ethernet_hdr));
-		req_iface = get_interface_from_rt(ipPacket, reqPacket->sr_inst);
-		if (ipHdr->ip_dst.s_addr == ipPacket && reqPacket->sent==false)
-			break;
-		reqPacket = reqPacket->next;
+	uint32_t longestMatch=0;
+	while (reqPacket->next) {
+		
+		reqPacket=reqPacket->next;
 	}
-
-	//req_iface = get_interface_from_rt(ipPacket, reqPacket->sr_inst);
-	printf("Got packet from queue\n");
+	
+	ipHdr= (struct ip *)(reqPacket->pkt + sizeof(struct sr_ethernet_hdr));
+	req_iface = get_interface_from_rt(ipHdr->ip_dst.s_addr, reqPacket->sr_inst);
+	//printf("Got packet from queue\n");
+	printf("Got last packet from queue and sending through %s\n",req_iface->interface);
 	if(reqPacket==NULL){
 		reqPacket = front;
 		while(reqPacket!=NULL){
@@ -372,13 +370,13 @@ void sr_handlepacket(struct sr_instance* sr,
 
 	printf("\n*** -> Received packet of length %d \n", len);
 	struct sr_ethernet_hdr *ethHdr = (struct sr_ethernet_hdr*)packet;
-
+	
 	if (ntohs(ethHdr->ether_type) == ETHERTYPE_ARP) {
 		printf(" \n ether dhost %s\n", ether_ntoa(ethHdr->ether_dhost));
 		struct sr_arphdr *arpHdr = (struct sr_arphdr*)(packet + sizeof(struct sr_ethernet_hdr));
 
 		if (arpHdr->ar_op == ntohs(ARP_REQUEST)) {
-
+		
 			struct in_addr dstIP, srcIP;
 			dstIP.s_addr = arpHdr->ar_tip;
 			srcIP.s_addr = arpHdr->ar_sip;
@@ -415,7 +413,8 @@ void sr_handlepacket(struct sr_instance* sr,
 
 		struct ip *ipHdr = (struct ip*)(packet + sizeof(struct sr_ethernet_hdr));
 		struct sr_if* interfs = sr->if_list;
-
+		printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
+				printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
 		if(ipHdr->ip_p==89){
 		
 			//handle OSPF packets
@@ -541,9 +540,10 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 	struct sr_ethernet_hdr* ethHdr = (struct sr_ethernet_hdr*)packet;
 	struct ip *ipHdr = (struct ip*)(packet + sizeof(struct sr_ethernet_hdr));
 	unsigned char mac_addr[6];
-
-	if (check_arp_cache(ipHdr->ip_dst.s_addr) == true) {
-		//  mac_addr = get_mac_addr_cache(ipHdr->ip_dst.s_addr);
+	struct sr_rt *rTable = get_interface_from_rt(ipHdr->ip_dst.s_addr,sr);
+	if(check_arp_cache(ipHdr->ip_dst.s_addr) == true)
+	{
+		
 		int i;
 		if (ipHdr->ip_p == 1) {
 			struct sr_icmp_hdr *icmpHdr = (struct sr_icmp_hdr*)(packet + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip));
@@ -574,6 +574,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 
 
 		}
+		
 		struct cache_node *temp = head_cache;
 		while (temp) {
 			if (temp->ip_addr == ipHdr->ip_dst.s_addr)
@@ -611,13 +612,92 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			ipHdr->ip_ttl = ipHdr->ip_ttl - 1;
 		ipHdr->ip_sum = 0;
 		ipHdr->ip_sum = packet_checksum((uint16_t*)ipHdr, 20);
+		printf("Length of packet to be sent is\n",len);
 		//ipHdr->ip_sum=checksum_compute((uint16_t*) ipHdr, 32);
 		sr_send_packet(sr, packet, len, interface);
 	}
+	else if (rTable && rTable->dest.s_addr!=0 && check_arp_cache(rTable->gw.s_addr) == true) {
+		//  mac_addr = get_mac_addr_cache(ipHdr->ip_dst.s_addr);
+		int i;
+		if (ipHdr->ip_p == 1) {
+			struct sr_icmp_hdr *icmpHdr = (struct sr_icmp_hdr*)(packet + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip));
+			printf("ICMP packet\n");
 
+			if (icmpHdr->icmp_type == 8) {
+				printf("ECHO request\n");
+
+				icmpHdr->icmp_chksum = 0;
+				icmpHdr->icmp_chksum = packet_checksum((uint16_t*)icmpHdr, 64);
+			}
+			else if (icmpHdr->icmp_type == 0) {
+				printf("ECHO reply\n");
+			}
+			else if (icmpHdr->icmp_type == 11) {
+				printf("Time exceeded message\n");
+			}
+
+		}
+		if (ipHdr->ip_p == 17) {
+
+			printf("UDP packet for traceroute\n");
+			//printf("TTL is %d\n", ipHdr->ip_ttl);
+			if (ipHdr->ip_ttl == 0) {
+				sr_send_icmp(sr, packet, len, ICMP_TIME_EXCEEDED_TYPE, 0);
+				return;
+			}
+
+
+		}
+		
+		struct cache_node *temp = head_cache;
+		while (temp) {
+			if (temp->ip_addr == rTable->gw.s_addr)
+			{
+				for (i = 0; i < 6; i++)
+					mac_addr[i] = temp->hw_addr[i];
+				break;
+			}
+			temp = temp->next;
+		}
+		memcpy(ethHdr->ether_dhost, mac_addr, sizeof(ethHdr->ether_dhost));
+		DebugMAC(mac_addr);
+		DebugMAC(ethHdr->ether_dhost);
+		struct sr_if* req_iface = sr->if_list;
+		while (req_iface)
+		{
+			if (strcmp(req_iface->name, interface) == 0)
+			{
+				break;
+			}
+
+			req_iface = req_iface->next;
+		}
+
+		for (i = 0; i < ETHER_ADDR_LEN; i++) {
+			ethHdr->ether_shost[i] = req_iface->addr[i];
+			//arpHdr->ar_sha[i] = req_iface->addr[i];
+		}
+
+		if ( ipHdr->ip_v != 4)
+			return;
+
+		if (ipHdr->ip_ttl == 0) return ; // write code for send an ICMP bessage back
+		else
+			ipHdr->ip_ttl = ipHdr->ip_ttl - 1;
+		ipHdr->ip_sum = 0;
+		ipHdr->ip_sum = packet_checksum((uint16_t*)ipHdr, 20);
+		printf("Length of packet to be sent is\n",len);
+		//ipHdr->ip_sum=checksum_compute((uint16_t*) ipHdr, 32);
+		sr_send_packet(sr, packet, len, interface);
+	}
+	
 	else {
 		enqueue(packet, sr, len);
-		sr_arp_request(sr, packet, interface, ipHdr->ip_dst.s_addr, len);
+		struct sr_rt *rtable = get_interface_from_rt(ipHdr->ip_dst.s_addr,sr);
+		if(rtable->dest.s_addr!=0)
+			sr_arp_request(sr, packet, rtable->interface, rtable->gw.s_addr, len);
+		else
+			sr_arp_request(sr, packet, rtable->interface, ipHdr->ip_dst.s_addr, len);
 	}
 
 }
@@ -768,33 +848,37 @@ struct sr_rt* get_interface_from_rt(uint32_t dest, struct sr_instance * sr) {
 	struct sr_rt *routing_table = sr->routing_table;
 	struct in_addr temp;
 	temp.s_addr = dest;
+	uint32_t max=0;
+	struct sr_rt* maxRt;
+
 	//printf("Actual dest is %s\n", inet_ntoa(temp));
 	while (routing_table)
 	{
-		if ((routing_table->dest).s_addr != 0)
-		{
-			uint32_t dest_table = (routing_table->dest).s_addr;
-			uint32_t mask = (routing_table->mask).s_addr;
-			uint32_t prefix = dest & mask;
-
-			temp.s_addr = prefix;
-
-			//printf("Result of AND is %s\n", inet_ntoa(temp));
-			temp.s_addr = dest;
-			//printf("Searching for %s\n", inet_ntoa(temp));
-			if (dest_table == prefix)
+		
+		
+			uint32_t res = dest & routing_table->gw.s_addr;
+			temp.s_addr = (dest ^ (routing_table->gw.s_addr)) ^ 0xffffffff;
+			
+			char *ip = inet_ntoa(temp);
+			//printf("AND operation is %s\n",ip);
+			if(strstr(ip,"255.255.255") != NULL)
 			{
-				//printf("\n\nMatch\n\n");
-				return routing_table;
-
-
+				//printf("NOT NULL\n");
+				if(res>max){
+					max=res;
+					maxRt = routing_table;
+				}
 			}
-		}
+			else{
+				return NULL;
+			}
+			
+		
 		routing_table = routing_table->next;
 	}
 
-
-	return NULL;
+	
+	return maxRt;
 }
 
 void send_default_route(uint8_t *packet, struct sr_instance * sr, int len) {

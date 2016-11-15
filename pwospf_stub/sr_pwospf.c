@@ -191,9 +191,9 @@ static void* pwospf_run_thread(void* arg)
 
 void sr_send_hello(void* arg)
 {
-	while (1)
-	{
-		//sleep(10);
+	//while (1)
+	//{
+		sleep(10);
 		if (!lock)
 		{
 			lock = true;
@@ -281,7 +281,7 @@ void sr_send_hello(void* arg)
 			sleep(10);
 		}
 
-	}
+	//}
 
 }
 
@@ -474,7 +474,7 @@ bool check_interface_in_neighbors(char *intf)
 	neighbor *temp = head;
 	while (temp)
 	{
-		if (strcmp(temp->intf, intf) == 0)
+		if (intf && strcmp(temp->intf, intf) == 0)
 			return true;
 		temp = temp->next;
 	}
@@ -546,7 +546,7 @@ void sr_send_lsu(void* arg)
 			seqnum++;
 			lsuhdr->seq = seqnum;
 			iphdr->ip_sum = 0;
-			lsu_pkt *ads = (lsu_pkt *)malloc(3 * sizeof(lsu_pkt));
+			lsu_pkt ads[3];
 			uint8_t *pkt = (uint8_t *)malloc(sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + 
 					sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
 				                                 (sizeof(struct ospfv2_lsu) * 3));
@@ -618,8 +618,10 @@ void sr_send_lsu(void* arg)
 				temp = temp->next;
 
 			}
-			free(ads);
-			free(pkt);
+			
+			if(pkt)
+				free(pkt);
+			break;
 		}
 		sleep(20);
 	}

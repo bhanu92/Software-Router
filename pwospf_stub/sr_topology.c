@@ -130,7 +130,7 @@ void update_routing_table(struct sr_instance *sr)
 char* fetch_interface_for_destination(struct sr_instance *sr,uint32_t dest)
 {
 	if(dest==0)
-	return NULL;
+		return NULL;
 	struct sr_if *iflist = sr->if_list;
 	struct in_addr temp1;
 	temp1.s_addr = dest;
