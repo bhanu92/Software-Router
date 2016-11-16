@@ -124,7 +124,7 @@ void update_routing_table(struct sr_instance *sr)
 		iflist=iflist->next;
 	}
 	if(iflist)
-		add_entry_to_routing_table(sr,0,iflist->ip,0,iflist->name);
+add_entry_to_routing_table(sr,0,iflist->ip,0,iflist->name);
 }
 
 char* fetch_interface_for_destination(struct sr_instance *sr,uint32_t dest)

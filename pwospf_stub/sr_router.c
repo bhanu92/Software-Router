@@ -61,6 +61,8 @@ void sr_route_packet(struct sr_instance* sr, uint8_t* packet, int len, char* int
 void send_default_route(uint8_t *packet, struct sr_instance *sr, int len);
 void print_interface(struct sr_rt *rt);
 void sr_send_icmp(struct sr_instance* sr, uint8_t* packet, unsigned int len, uint8_t type, uint8_t code);
+void dequeue();
+unsigned char* get_mac_addr_cache(uint32_t ipAddr);
 
 
 struct sr_icmp_hdr
@@ -81,45 +83,25 @@ struct ip_queue_node
 	bool sent;
 };
 
-struct ip_queue_node *front = NULL;
-struct ip_queue_node *rear = NULL;
+
+struct ip_queue_node ip_cache[5];
+struct ip_queue_node *rear = NULL,*front=NULL;
 
 void enqueue(uint8_t *pack, struct sr_instance* sr, int len) {
 	assert(pack);
 	assert(sr);
 	printf("Adding IP packet to queue\n");
 	int i;
-	i = get_queue_length();
-	if (i < 5) {
-		struct ip_queue_node *temp = (struct ip_queue_node *)malloc(sizeof(struct ip_queue_node));
-		if (temp != NULL) {
-			temp->pkt = pack;
-			temp->sr_inst = sr;
-			temp->length = len;
-			temp->sent = false;
-			temp->next = NULL;
-			if ( front == NULL && rear == NULL) {
-				front = temp;
-				rear = temp;
-				return;
-			}
-			rear->next = temp;
-			rear = temp;
+	for(i=0;i<5;i++)
+		if(ip_cache[i].pkt==NULL)
+		{
+			ip_cache[i].pkt = pack;
+			ip_cache[i].sr_inst = sr;
+			ip_cache[i].sent=false;
+			ip_cache[i].length = len;
+			break;
 		}
-	}
-
-	else {
-
-		//dequeue();
-		printf("Deleted the entire IP Cache sending the ICMP Unreachable message\n");
-
-		//sr_send_icmp(sr,pack, len, 3, 1);
-
-
-	}
-
-
-
+	
 }
 
 void new_icmp(struct sr_icmp_hdr * icmpHdr, uint8_t type, uint8_t code, int len)
@@ -157,52 +139,65 @@ void new_ip(struct ip* ipHdr, unsigned int len, uint16_t off, unsigned char ttl,
 void sr_send_cachedpacket( uint32_t ipPacket) {
 
 	assert(ipPacket);
-	struct ip_queue_node* reqPacket = front;
+	//struct ip_queue_node* reqPacket = front;
 	uint8_t* temp_pkt;
 	struct sr_rt* req_iface;
 	struct ip* ipHdr;
 	uint32_t longestMatch = 0;
-	while (reqPacket->next) {
+	int i;
 
-		reqPacket = reqPacket->next;
-	}
-
-	ipHdr = (struct ip *)(reqPacket->pkt + sizeof(struct sr_ethernet_hdr));
-	req_iface = get_interface_from_rt(ipHdr->ip_dst.s_addr, reqPacket->sr_inst);
-	//printf("Got packet from queue\n");
-	printf("Got last packet from queue and sending through %s\n", req_iface->interface);
-	if (reqPacket == NULL) {
-		reqPacket = front;
-		while (reqPacket != NULL) {
-			if (reqPacket->sent == false) {
-				send_default_route(reqPacket->pkt, reqPacket->sr_inst, reqPacket->length);
-				reqPacket->sent = true;
-				return;
-			}
-			reqPacket = reqPacket->next;
-		}
-	}
-	else
+	
+	
+	for(i=0;i<5;i++)
 	{
-		//print_interface(req_iface);
-		if (req_iface == NULL)
+		
+		if(ip_cache[i].pkt!=NULL)
 		{
-			printf("Going to default route\n");
-			if (reqPacket) {
-				send_default_route(reqPacket->pkt, reqPacket->sr_inst, reqPacket->length);
-				reqPacket->sent = true;
+			ipHdr = (struct ip *)(ip_cache[i].pkt + sizeof(struct sr_ethernet_hdr));
+			req_iface = get_interface_from_rt(ipHdr->ip_dst.s_addr, ip_cache[i].sr_inst);
+		
+			if(req_iface==NULL)
+			{
+				printf("Sending through gateway\n");
+				struct sr_ethernet_hdr *ethHdr = (struct sr_ethernet_hdr *)(ip_cache[i].pkt);
+				struct sr_if *iflist = ip_cache[i].sr_inst->if_list;
+				int i;
+				while(iflist)
+				{
+					if(strcmp(iflist->name,"eth0")==0)
+						break;
+					iflist=iflist->next;
+				}
+				for(i=0;i<6;i++)
+					ethHdr->ether_shost[i]=iflist->addr[i];
+					
+				struct sr_rt *routing_table = ip_cache[i].sr_inst->routing_table;
+				while(routing_table)
+				{
+					if(routing_table->dest.s_addr==0 && strcmp(routing_table->interface,"eth0"))
+						break;
+					routing_table=routing_table->next;
+				}
+				char *addr = get_mac_addr_cache(routing_table->gw.s_addr);
+				for(i=0;i<6;i++)
+					ethHdr->ether_dhost[i]=addr[i];
+				sr_send_packet(ip_cache[i].sr_inst,ip_cache[i].pkt,ip_cache[i].length,"eth0");
+				
 			}
-		}
-		else
-		{
-			printf("\nRouting the Cached Packet\n");
-			if (reqPacket) {
-				sr_route_packet(reqPacket->sr_inst, reqPacket->pkt, reqPacket->length, req_iface->interface);
-				reqPacket->sent = true;
+			else
+			{
+			//printf("Got packet from queue\n");
+				printf("Got last packet from queue and sending through %s\n", req_iface->interface); 
+				sr_route_packet(ip_cache[i].sr_inst, ip_cache[i].pkt, ip_cache[i].length, req_iface->interface);
+							
 			}
+			
+		
 		}
-		printf("Route packet successful\n");
+		
 	}
+	//dequeue();
+	
 }
 
 void print_interface(struct sr_rt *rt)
@@ -213,6 +208,7 @@ void print_interface(struct sr_rt *rt)
 }
 
 void dequeue() {
+	
 	struct ip_queue_node *temp = front;
 	if (front == NULL)
 		printf("IP cache queue is empty\n");
@@ -221,9 +217,18 @@ void dequeue() {
 		front = NULL;
 		rear =NULL;
 	}
-	else
-		front = front->next;
-	free(temp);
+	struct ip_queue_node *temp2;
+	while(temp)
+	{
+		if(temp->sent==true)
+		{
+			temp2=temp->next;
+			free(temp);
+			temp=temp2;
+		}
+		temp=temp->next;
+	}
+	front=temp2;
 }
 
 
@@ -695,7 +700,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			ipHdr->ip_ttl = ipHdr->ip_ttl - 1;
 		ipHdr->ip_sum = 0;
 		ipHdr->ip_sum = packet_checksum((uint16_t*)ipHdr, 20);
-		printf("Length of packet to be sent is %d\n", len);
+		printf("Length of packet to be sent is %d\n\n", len);
 		//ipHdr->ip_sum=checksum_compute((uint16_t*) ipHdr, 32);
 		sr_send_packet(sr, packet, len, interface);
 	}
