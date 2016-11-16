@@ -26,3 +26,6 @@ sr
 .viminfo
 .vnlconn.d 
 .swp
+rtable*
+
+
