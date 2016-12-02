@@ -377,6 +377,7 @@ void sr_handlepacket(struct sr_instance* sr,
 
 	printf("\n*** -> Received packet of length %d \n", len);
 	struct sr_ethernet_hdr *ethHdr = (struct sr_ethernet_hdr*)packet;
+	struct sr_if* iface = sr_get_interface(sr, interface);
 
 	if (ntohs(ethHdr->ether_type) == ETHERTYPE_ARP) {
 		printf(" \n ether dhost %s\n", ether_ntoa(ethHdr->ether_dhost));
@@ -429,7 +430,7 @@ void sr_handlepacket(struct sr_instance* sr,
 
 			//handle OSPF packets
 			printf("Handling OSPF packet\n");
-			handle_ospf_packet(sr, packet);
+			handle_ospf_packet(sr, packet, iface);
 			return;
 		}
 		if (ipHdr->ip_p == 1) {
@@ -708,10 +709,14 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 	else {
 		enqueue(packet, sr, len);
 		struct sr_rt *rtable = get_interface_from_rt(ipHdr->ip_dst.s_addr, sr);
-		if (rtable->dest.s_addr != 0)
+		if (rtable->gw.s_addr != 0){
+			printf("Destination for ARP packet :%s\n",inet_ntoa(rtable->gw));
 			sr_arp_request(sr, packet, rtable->interface, rtable->gw.s_addr, len);
-		else
+		}
+		else{
+			printf("Destination for ARP packet :%s\n",inet_ntoa(ipHdr->ip_dst));
 			sr_arp_request(sr, packet, rtable->interface, ipHdr->ip_dst.s_addr, len);
+		}
 	}
 
 }
@@ -823,6 +828,7 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 			}
 
 			struct sr_if* req_iface = sr->if_list;
+			
 			while (req_iface)
 			{
 				if (strcmp(req_iface->name, interface) == 0)
@@ -850,40 +856,51 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 
 
 struct sr_rt* get_interface_from_rt(uint32_t dest, struct sr_instance * sr) {
+
+	
 	struct sr_rt *routing_table = sr->routing_table;
 	struct in_addr temp;
 	temp.s_addr = dest;
 	uint32_t max = 0;
 	struct sr_rt* maxRt;
-
+	int numMatches=0;
+	//sr_print_routing_table(sr);
 	//printf("Actual dest is %s\n", inet_ntoa(temp));
 	while (routing_table)
 	{
-
-
-		uint32_t res = dest & routing_table->gw.s_addr;
-		temp.s_addr = (dest ^ (routing_table->gw.s_addr)) ^ 0xffffffff;
-
-		char *ip = inet_ntoa(temp);
-		//printf("AND operation is %s\n",ip);
-		if (strstr(ip, "255.255.255") != NULL)
+		
+		uint32_t res1 = dest & routing_table->mask.s_addr;
+		uint32_t res2 = (routing_table->dest.s_addr)&(routing_table->mask.s_addr);
+		if(res1==res2 && routing_table->dest.s_addr!=0)
 		{
-			//printf("NOT NULL\n");
-			if (res > max) {
-				max = res;
-				maxRt = routing_table;
-			}
+			return routing_table;
+			//printf("Match occurred\n");
+			//numMatches++;
 		}
-		else {
-			return NULL;
-		}
+		//printf("AND operation is %s\n",ip);
+		
 
 
 		routing_table = routing_table->next;
 	}
-
-
-	return maxRt;
+	if(numMatches>=1)
+	{
+		routing_table=sr->routing_table;
+		while(routing_table)
+		{
+			uint32_t res1 = dest & routing_table->mask.s_addr;
+			uint32_t res2 = (routing_table->dest.s_addr)&(routing_table->mask.s_addr);
+			if(res1==res2)
+			{
+				printf("Interface is %s\n",routing_table->interface);
+				return routing_table->interface;
+			}
+			routing_table = routing_table->next;
+		}
+			
+	}
+	return NULL;
+	
 }
 
 void send_default_route(uint8_t *packet, struct sr_instance * sr, int len) {

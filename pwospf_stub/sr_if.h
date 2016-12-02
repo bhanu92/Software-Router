@@ -43,6 +43,11 @@ struct sr_if
     uint32_t speed;
     volatile uint32_t mask;
     struct sr_if* next;
+
+    //pwospf parameters
+
+    uint32_t neighbor_id ;
+    uint32_t neighbor_ip ;
 };
 
 struct sr_if* sr_get_interface(struct sr_instance* sr, const char* name);

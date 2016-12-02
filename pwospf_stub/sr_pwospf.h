@@ -28,7 +28,8 @@ struct pwospf_subsys
 };
 
 int pwospf_init(struct sr_instance* sr);
-void handle_ospf_packet(struct sr_instance *sr, uint8_t *packet);
+
+//void handle_ospf_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *iface);
 
 struct ospf_neighbor
 {

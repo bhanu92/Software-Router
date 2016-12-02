@@ -12,18 +12,19 @@
 
 struct ospfv2_topo_entry
 {
-    struct in_addr router_id;     /* -- router id -- */
-    struct in_addr net_prefix;       /* -- network prefix -- */
-    struct in_addr net_mask;      /* -- network mask -- */
-    struct in_addr next_hop;      /* -- next hop -- */
-    uint16_t sequence_num;        /* -- sequence number of the LSU -- */
-    int age;                      /* -- LSA age -- */
+    struct in_addr router_id;    
+    struct in_addr subnet;       
+    struct in_addr net_mask;
+    struct in_addr neighbor_id;   
+    struct in_addr next_hop;      
+    uint16_t sequence_num;        
+    int age;                      
     struct ospfv2_topo_entry *next;
 }__attribute__((packed));
 
 typedef struct ospfv2_topo_entry top_entry;
 
-void add_topology_entry(uint32_t,uint32_t,uint32_t,uint32_t,uint16_t);
+void add_topology_entry(uint32_t router_id, uint32_t subnet, uint32_t net_mask, uint32_t neighbor_id, uint32_t next_hop, uint16_t seqNum);
 void remove_topology_entry(uint32_t,uint32_t);
 bool check_topology_entry(uint32_t,uint32_t);
 uint16_t get_sequence_number(uint32_t,uint32_t);
@@ -35,3 +36,4 @@ bool check_routing_table(struct sr_instance *sr,uint32_t dest_prefix,uint32_t ne
 char* fetch_interface_for_destination(struct sr_instance *sr,uint32_t dest);
 void print_routing_table(struct sr_instance *sr);
 bool check_router_interfaces(struct sr_instance *sr, uint32_t ip);
+void adding_defualt_route(struct sr_instance *sr);

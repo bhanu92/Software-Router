@@ -204,6 +204,8 @@ void sr_print_if(struct sr_if* iface)
 {
     struct in_addr ip_addr;
     struct in_addr mask_addr;
+    struct in_addr neighbor_id;
+    struct in_addr neighbor_ip;
 
     /* -- REQUIRES --*/
     assert(iface);
@@ -211,6 +213,8 @@ void sr_print_if(struct sr_if* iface)
 
     ip_addr.s_addr = iface->ip;
     mask_addr.s_addr = iface->mask;
+    neighbor_id.s_addr = iface->neighbor_id;
+    neighbor_ip.s_addr = iface->neighbor_ip;
 
     Debug("Interface: %s\n",iface->name);
     Debug("  hardware address ");
@@ -218,4 +222,6 @@ void sr_print_if(struct sr_if* iface)
     Debug("\n");
     Debug("  mask %s\n",inet_ntoa(mask_addr));
     Debug("  ip address %s\n",inet_ntoa(ip_addr));
+    Debug("  NID address %s\n",inet_ntoa(neighbor_id));
+    Debug("  NIP address %s\n",inet_ntoa(neighbor_ip));
 } /* -- sr_print_if -- */
