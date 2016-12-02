@@ -64,7 +64,6 @@ void sr_send_icmp(struct sr_instance* sr, uint8_t* packet, unsigned int len, uin
 void dequeue();
 unsigned char* get_mac_addr_cache(uint32_t ipAddr);
 
-
 struct sr_icmp_hdr
 {
 	uint8_t icmp_type;
@@ -74,34 +73,56 @@ struct sr_icmp_hdr
 	uint16_t icmp_seq;
 };
 
-struct ip_queue_node
+struct ip_cache_node
 {
 	uint8_t *pkt;
 	struct sr_instance* sr_inst;
 	int length;
-	struct ip_queue_node *next;
+	struct ip_cache_node *next;
+	char* tx_intf;
+
 	bool sent;
 };
 
 
-struct ip_queue_node ip_cache[5];
-struct ip_queue_node *rear = NULL,*front=NULL;
+struct ip_cache_node *ip_cache_head = NULL;
+struct ip_cache_node *rear = NULL, *front = NULL;
 
-void enqueue(uint8_t *pack, struct sr_instance* sr, int len) {
+void enqueue(uint8_t *pack, struct sr_instance* sr, int len, char* interface) {
 	assert(pack);
 	assert(sr);
 	printf("Adding IP packet to queue\n");
-	int i;
-	for(i=0;i<5;i++)
-		if(ip_cache[i].pkt==NULL)
-		{
-			ip_cache[i].pkt = pack;
-			ip_cache[i].sr_inst = sr;
-			ip_cache[i].sent=false;
-			ip_cache[i].length = len;
-			break;
-		}
+
+	//int i;
+	//i = get_queue_length();
+	//Need to change this if condition (value of i)
+	//if (i <= 20) {
+		//Adding IP packets to the head of the Linked list
 	
+			struct ip_cache_node *ip_cache = (struct ip_cache_node*)malloc(sizeof(struct ip_cache_node));
+			ip_cache->pkt = pack;
+			ip_cache->sr_inst = sr;
+			ip_cache->length = len;
+			ip_cache->tx_intf = interface;
+			ip_cache->sent=false;
+
+			if (ip_cache_head == NULL)
+				ip_cache_head = ip_cache;
+			else {
+				ip_cache->next = ip_cache_head;
+				ip_cache_head = ip_cache;
+			}
+			
+		
+	//}
+
+	//else {
+		//dequeue();
+	//	printf("Deleted the entire IP Cache sending the ICMP Unreachable message\n");
+
+		//sr_send_icmp(sr,pack, len, 3, 1);
+	//}
+
 }
 
 void new_icmp(struct sr_icmp_hdr * icmpHdr, uint8_t type, uint8_t code, int len)
@@ -136,71 +157,104 @@ void new_ip(struct ip* ipHdr, unsigned int len, uint16_t off, unsigned char ttl,
 }
 
 
-void sr_send_cachedpacket( uint32_t ipPacket) {
+void sr_send_cachedpacket(uint32_t ip_addr, char* tx_interface) {
 
-	assert(ipPacket);
-	//struct ip_queue_node* reqPacket = front;
+	assert(ip_addr);
+	//struct ip_cache_node* reqPacket = front;
 	uint8_t* temp_pkt;
 	struct sr_rt* req_iface;
 	struct ip* ipHdr;
-	uint32_t longestMatch = 0;
-	int i;
+	//uint32_t longestMatch = 0;
+	//int i;
+	struct ip_cache_node* current = ip_cache_head;
+	struct ip_cache_node* previous = NULL;
+	if (ip_cache_head == NULL) {
+		printf("IP Cache is empty\n");
+		return;
+	}
+	
+	while (current) {
 
+
+		if (current->sent==false && strcmp(current->tx_intf, tx_interface) == 0) {
+			struct sr_if* iflist = current->sr_inst->if_list;
+			while (iflist) {
+				if (strcmp(iflist->name, tx_interface) == 0)
+					break;
+				iflist = iflist->next;
+			}
+			int i;
+			struct sr_ethernet_hdr *ethHdr = (struct sr_ethernet_hdr *)(current->pkt);
+			for (i = 0; i < 6; i++)
+				ethHdr->ether_shost[i] = iflist->addr[i];
+			char *mac_addr = get_mac_addr_cache(ip_addr);
+			for (i = 0; i < 6; i++)
+				ethHdr->ether_dhost[i] = mac_addr[i];
+			sr_send_packet(current->sr_inst, current->pkt, current->length, iflist->name);
+			current->sent=true;
+			//free(current);
+		}
+
+		current = current->next;
+	}
 	
-	
-	for(i=0;i<5;i++)
+}
+
+/*
+	for (i = 0; i < 5; i++)
 	{
-		
-		if(ip_cache[i].pkt!=NULL)
+
+		if (ip_cache[i].pkt != NULL)
 		{
 			ipHdr = (struct ip *)(ip_cache[i].pkt + sizeof(struct sr_ethernet_hdr));
 			req_iface = get_interface_from_rt(ipHdr->ip_dst.s_addr, ip_cache[i].sr_inst);
-		
-			if(req_iface==NULL)
+
+			if (req_iface == NULL)
 			{
 				printf("Sending through gateway\n");
 				struct sr_ethernet_hdr *ethHdr = (struct sr_ethernet_hdr *)(ip_cache[i].pkt);
 				struct sr_if *iflist = ip_cache[i].sr_inst->if_list;
 				int i;
-				while(iflist)
+				while (iflist)
 				{
-					if(strcmp(iflist->name,"eth0")==0)
+					if (strcmp(iflist->name, "eth0") == 0)
 						break;
-					iflist=iflist->next;
+					iflist = iflist->next;
 				}
-				for(i=0;i<6;i++)
-					ethHdr->ether_shost[i]=iflist->addr[i];
-					
+				for (i = 0; i < 6; i++)
+					ethHdr->ether_shost[i] = iflist->addr[i];
+
 				struct sr_rt *routing_table = ip_cache[i].sr_inst->routing_table;
-				while(routing_table)
+				while (routing_table)
 				{
-					if(routing_table->dest.s_addr==0 && strcmp(routing_table->interface,"eth0"))
+					if (routing_table->dest.s_addr == 0 && strcmp(routing_table->interface, "eth0"))
 						break;
-					routing_table=routing_table->next;
+					routing_table = routing_table->next;
 				}
 				char *addr = get_mac_addr_cache(routing_table->gw.s_addr);
-				for(i=0;i<6;i++)
-					ethHdr->ether_dhost[i]=addr[i];
-				sr_send_packet(ip_cache[i].sr_inst,ip_cache[i].pkt,ip_cache[i].length,"eth0");
-				
+				for (i = 0; i < 6; i++)
+					ethHdr->ether_dhost[i] = addr[i];
+				sr_send_packet(ip_cache[i].sr_inst, ip_cache[i].pkt, ip_cache[i].length, "eth0");
+
 			}
 			else
 			{
-			//printf("Got packet from queue\n");
-				printf("Got last packet from queue and sending through %s\n", req_iface->interface); 
+				//printf("Got packet from queue\n");
+				printf("Got last packet from queue and sending through %s\n", req_iface->interface);
 				sr_route_packet(ip_cache[i].sr_inst, ip_cache[i].pkt, ip_cache[i].length, req_iface->interface);
-							
-			}
-			
-		
-		}
-		
-	}
-	//dequeue();
-	
-}
 
-void print_interface(struct sr_rt *rt)
+			}
+
+
+		}
+
+	}
+
+
+*/
+
+
+void print_interface(struct sr_rt * rt)
 {
 	printf("Interface name - %s\n", rt->interface);
 
@@ -208,34 +262,23 @@ void print_interface(struct sr_rt *rt)
 }
 
 void dequeue() {
-	
-	struct ip_queue_node *temp = front;
-	if (front == NULL)
+
+	struct ip_cache_node *temp = ip_cache_head;
+	if (temp == NULL)
 		printf("IP cache queue is empty\n");
-		return;
-	if(front == rear){
-		front = NULL;
-		rear =NULL;
+	return;
+	while (temp) {
+		temp->next = ip_cache_head;
+		temp = temp->next;
+		free(temp);
 	}
-	struct ip_queue_node *temp2;
-	while(temp)
-	{
-		if(temp->sent==true)
-		{
-			temp2=temp->next;
-			free(temp);
-			temp=temp2;
-		}
-		temp=temp->next;
-	}
-	front=temp2;
 }
 
 
 int get_queue_length() {
-	struct ip_queue_node *temp = front;
+	struct ip_cache_node *temp = ip_cache_head;
 	int i;
-	i = 1;
+	i = 0;
 
 	while (temp) {
 		i++;
@@ -280,7 +323,7 @@ unsigned char* get_mac_addr_cache(uint32_t ipAddr) {
 }
 
 
-void arp_cache(struct sr_arphdr* arpHdr ) {
+void arp_cache(struct sr_arphdr * arpHdr ) {
 
 	bool existsInCache = check_arp_cache(arpHdr->ar_sip);
 	if (!existsInCache)
@@ -299,7 +342,7 @@ void arp_cache(struct sr_arphdr* arpHdr ) {
 				temp->hw_addr[i] = arpHdr->ar_sha[i];
 			}
 			temp->next = NULL;
-			printf("Caching the new MAC Address: %s\n",ether_ntoa(arpHdr->ar_sha));
+			printf("Caching the new MAC Address: %s\n", ether_ntoa(arpHdr->ar_sha));
 			if (head_cache == NULL) {
 				head_cache = temp;
 				return;
@@ -363,7 +406,7 @@ void destroy() {
  *
  *---------------------------------------------------------------------*/
 
-void sr_handlepacket(struct sr_instance* sr,
+void sr_handlepacket(struct sr_instance * sr,
                      uint8_t * packet/* lent */,
                      unsigned int len,
                      char* interface/* lent */)
@@ -411,7 +454,7 @@ void sr_handlepacket(struct sr_instance* sr,
 			printf("******************************************\n");
 			arp_cache(arpHdr);
 			//print_arp_cache();
-			sr_send_cachedpacket(arpHdr->ar_sip);
+			sr_send_cachedpacket(arpHdr->ar_sip, iface->name);
 
 		}
 
@@ -707,14 +750,14 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 	}
 
 	else {
-		enqueue(packet, sr, len);
+		enqueue(packet, sr, len, interface);
 		struct sr_rt *rtable = get_interface_from_rt(ipHdr->ip_dst.s_addr, sr);
-		if (rtable->gw.s_addr != 0){
-			printf("Destination for ARP packet :%s\n",inet_ntoa(rtable->gw));
+		if (rtable->gw.s_addr != 0) {
+			printf("Destination for ARP packet :%s\n", inet_ntoa(rtable->gw));
 			sr_arp_request(sr, packet, rtable->interface, rtable->gw.s_addr, len);
 		}
-		else{
-			printf("Destination for ARP packet :%s\n",inet_ntoa(ipHdr->ip_dst));
+		else {
+			printf("Destination for ARP packet :%s\n", inet_ntoa(ipHdr->ip_dst));
 			sr_arp_request(sr, packet, rtable->interface, ipHdr->ip_dst.s_addr, len);
 		}
 	}
@@ -776,11 +819,11 @@ void sr_arp_reply(struct sr_instance * sr, uint8_t * packet, unsigned int len, c
 	tip.s_addr = arpReply->ar_tip;
 	printf("******************************************\n");
 	printf("Sending ARP reply to the browser\n");
-	printf("Src IP: %s\t",inet_ntoa(sip));
+	printf("Src IP: %s\t", inet_ntoa(sip));
 	printf("Dst IP: %s\n", inet_ntoa(tip));
-	printf("Src MAC: %s\t",ether_ntoa(arpReply->ar_sha));
-	printf("Dst MAC: %s\n",ether_ntoa(arpReply->ar_tha));
-	printf("Sending ARP reply from Interface %s\n",interface);
+	printf("Src MAC: %s\t", ether_ntoa(arpReply->ar_sha));
+	printf("Dst MAC: %s\n", ether_ntoa(arpReply->ar_tha));
+	printf("Sending ARP reply from Interface %s\n", interface);
 	printf("******************************************\n");
 
 	sr_send_packet(sr, packet, len, interface); // calling the send packet function from sr_router.h
@@ -828,7 +871,7 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 			}
 
 			struct sr_if* req_iface = sr->if_list;
-			
+
 			while (req_iface)
 			{
 				if (strcmp(req_iface->name, interface) == 0)
@@ -857,50 +900,50 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 
 struct sr_rt* get_interface_from_rt(uint32_t dest, struct sr_instance * sr) {
 
-	
+
 	struct sr_rt *routing_table = sr->routing_table;
 	struct in_addr temp;
 	temp.s_addr = dest;
 	uint32_t max = 0;
 	struct sr_rt* maxRt;
-	int numMatches=0;
+	int numMatches = 0;
 	//sr_print_routing_table(sr);
 	//printf("Actual dest is %s\n", inet_ntoa(temp));
 	while (routing_table)
 	{
-		
+
 		uint32_t res1 = dest & routing_table->mask.s_addr;
-		uint32_t res2 = (routing_table->dest.s_addr)&(routing_table->mask.s_addr);
-		if(res1==res2 && routing_table->dest.s_addr!=0)
+		uint32_t res2 = (routing_table->dest.s_addr) & (routing_table->mask.s_addr);
+		if (res1 == res2 && routing_table->dest.s_addr != 0)
 		{
 			return routing_table;
 			//printf("Match occurred\n");
 			//numMatches++;
 		}
 		//printf("AND operation is %s\n",ip);
-		
+
 
 
 		routing_table = routing_table->next;
 	}
-	if(numMatches>=1)
+	if (numMatches >= 1)
 	{
-		routing_table=sr->routing_table;
-		while(routing_table)
+		routing_table = sr->routing_table;
+		while (routing_table)
 		{
 			uint32_t res1 = dest & routing_table->mask.s_addr;
-			uint32_t res2 = (routing_table->dest.s_addr)&(routing_table->mask.s_addr);
-			if(res1==res2)
+			uint32_t res2 = (routing_table->dest.s_addr) & (routing_table->mask.s_addr);
+			if (res1 == res2)
 			{
-				printf("Interface is %s\n",routing_table->interface);
+				printf("Interface is %s\n", routing_table->interface);
 				return routing_table->interface;
 			}
 			routing_table = routing_table->next;
 		}
-			
+
 	}
 	return NULL;
-	
+
 }
 
 void send_default_route(uint8_t *packet, struct sr_instance * sr, int len) {
@@ -947,7 +990,7 @@ void send_default_route(uint8_t *packet, struct sr_instance * sr, int len) {
 	}
 	else
 	{
-		enqueue(packet, sr, len);
+		enqueue(packet, sr, len, interface);
 		sr_arp_request(sr, packet, interface, routing_table->gw.s_addr, len);
 	}
 
