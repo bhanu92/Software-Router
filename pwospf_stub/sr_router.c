@@ -916,9 +916,9 @@ struct sr_rt* get_interface_from_rt(uint32_t dest, struct sr_instance * sr) {
 		uint32_t res2 = (routing_table->dest.s_addr) & (routing_table->mask.s_addr);
 		if (res1 == res2 && routing_table->dest.s_addr != 0)
 		{
-			return routing_table;
+			//return routing_table;
 			//printf("Match occurred\n");
-			//numMatches++;
+			numMatches++;
 		}
 		//printf("AND operation is %s\n",ip);
 
@@ -926,21 +926,43 @@ struct sr_rt* get_interface_from_rt(uint32_t dest, struct sr_instance * sr) {
 
 		routing_table = routing_table->next;
 	}
-	if (numMatches >= 1)
+	if (numMatches > 1)
+	{
+		routing_table = sr->routing_table;
+		int max=-1;
+		struct sr_rt *route_table;
+		while (routing_table)
+		{
+			uint32_t res1 = dest & routing_table->mask.s_addr;
+			uint32_t res2 = (routing_table->dest.s_addr) & (routing_table->mask.s_addr);
+			if (res1 == res2 && routing_table->dest.s_addr != 0)
+			{
+				if(res1>max)
+				{
+					max=res1;
+					route_table = routing_table;
+					
+				}
+			}
+			routing_table = routing_table->next;
+		}
+		return route_table;
+
+	}
+	else if(numMatches==1)
 	{
 		routing_table = sr->routing_table;
 		while (routing_table)
 		{
 			uint32_t res1 = dest & routing_table->mask.s_addr;
 			uint32_t res2 = (routing_table->dest.s_addr) & (routing_table->mask.s_addr);
-			if (res1 == res2)
+			if (res1 == res2 && routing_table->dest.s_addr != 0)
 			{
 				printf("Interface is %s\n", routing_table->interface);
-				return routing_table->interface;
+				return routing_table;
 			}
 			routing_table = routing_table->next;
 		}
-
 	}
 	return NULL;
 
