@@ -274,3 +274,15 @@ void print_routing_table(struct sr_instance *sr)
 		routing_table = routing_table->next;
 	}
 }
+
+void clear_topology()
+{
+		printf("Deleting topology\n");
+		top_entry *temp = top_head,*next;
+		while(temp)
+		{
+				next=temp->next;
+				free(temp);
+				temp=next;
+		}	
+}

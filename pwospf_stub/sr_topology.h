@@ -37,3 +37,4 @@ char* fetch_interface_for_destination(struct sr_instance *sr,uint32_t dest);
 void print_routing_table(struct sr_instance *sr);
 bool check_router_interfaces(struct sr_instance *sr, uint32_t ip);
 void adding_defualt_route(struct sr_instance *sr);
+void clear_topology();

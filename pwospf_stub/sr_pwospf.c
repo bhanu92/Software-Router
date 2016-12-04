@@ -80,7 +80,7 @@ int pwospf_init(struct sr_instance* sr)
 
 	pthread_create(&hello_thread, NULL, &sr_send_hello, sr);
 	pthread_create(&monitor_thread, NULL, &sr_monitor_neighors, sr);
-	//pthread_create(&lsa_thread, NULL, &sr_send_lsu, sr);
+	pthread_create(&lsa_thread, NULL, &sr_send_lsu, sr);
 	return 0; /* success */
 } /* -- pwospf_init -- */
 
@@ -334,11 +334,12 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *if
 	temp.s_addr = ipHdr->ip_src.s_addr;
 	printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
 	printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
+	clear_topology();
 
 	for (i = 0; i < 3; i++)
 	{
-		if(ospfHdr->rid!=-1)
-		{
+		
+		
 			temp.s_addr = ospfHdr->rid;
 			printf("RID : %s\n", inet_ntoa(temp));
 			temp.s_addr = ads[i].subnet;
@@ -368,11 +369,8 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *if
 				printf("Adding entry to topology database\n");
 				add_topology_entry(ospfHdr->rid, ads[i].subnet, ads[i].mask, ads[i].rid, ipHdr->ip_src.s_addr, lsuHdr->seq);
 			}
-		}
-		else
-		{
-
-		}
+		
+		
 	}
 	print_topology();
 	update_routing_table(sr);
@@ -563,123 +561,131 @@ void sr_send_lsu(void* arg)
 {
 	while (1)
 	{
-
 		sleep(20);
 		pthread_mutex_lock(&neighbor_t);
-		int j;
-		printf("Sending LSU packet\n");
-		struct sr_instance *sr = (struct sr_instance*)arg;
-		struct sr_ethernet_hdr* ethhdr = ((struct sr_ethernet_hdr*)(malloc(sizeof(struct sr_ethernet_hdr))));
-		struct ip* iphdr = ((struct ip*)(malloc(sizeof(struct ip))));
-		struct ospfv2_hdr* ospfhdr = ((struct ospfv2_hdr*)(malloc(sizeof(struct ospfv2_hdr))));
-		struct ospfv2_lsu_hdr* lsuhdr = ((struct ospfv2_lsu_hdr*)(malloc(sizeof(struct ospfv2_lsu_hdr))));
-
-		ethhdr->ether_type =  htons(ETHERTYPE_IP);
-		int i;
-		for (i = 0; i < ETHER_ADDR_LEN; i++)
+		if(neighbor_head)
 		{
-			ethhdr->ether_dhost[i] = htons(0xff);
-		}
-		iphdr->ip_v = 4;
-		iphdr->ip_hl = 5;
-		iphdr->ip_tos = 0;
+			
+			
+			int j;
+			printf("Sending LSU packet\n");
+			struct sr_instance *sr = (struct sr_instance*)arg;
+			struct sr_ethernet_hdr* ethhdr = ((struct sr_ethernet_hdr*)(malloc(sizeof(struct sr_ethernet_hdr))));
+			struct ip* iphdr = ((struct ip*)(malloc(sizeof(struct ip))));
+			struct ospfv2_hdr* ospfhdr = ((struct ospfv2_hdr*)(malloc(sizeof(struct ospfv2_hdr))));
+			struct ospfv2_lsu_hdr* lsuhdr = ((struct ospfv2_lsu_hdr*)(malloc(sizeof(struct ospfv2_lsu_hdr))));
 
-		iphdr->ip_off = IP_DF;
-		iphdr->ip_id = htons(rand());
-		iphdr->ip_ttl = 64;
-		iphdr->ip_p = 89;
-		iphdr->ip_sum = 0;
-		iphdr->ip_len = htons(sizeof(struct ip) + sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
-		                      (sizeof(struct ospfv2_lsu) * 3));
-		ospfhdr->aid = 171;
-		ospfhdr->csum = 0;
-		ospfhdr->autype = 0;
-		ospfhdr->audata = 0;
-		ospfhdr->version = 2;
-		ospfhdr->type = 4;
-		ospfhdr->len = htons(sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) + (sizeof(struct ospfv2_lsu) * 3));
-		//neighbor *temp = neighbor_head;
-		lsuhdr->unused = 0;
-		lsuhdr->ttl = 64;
-		seqnum++;
-		lsuhdr->seq = seqnum;
-		//lsu_pkt ads[3];
-		lsuhdr->num_adv = htonl(3);
-		uint8_t *pkt = (uint8_t *)malloc(sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) +
-		                                 sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
-		                                 (sizeof(struct ospfv2_lsu) * 3));
-
-
-		struct sr_if* iflist = sr->if_list;
-		struct ospfv2_lsu* lsu_adv = ((struct ospfv2_lsu*)(malloc(3 * sizeof(struct ospfv2_lsu))));
-
-		while(iflist){
-			if(strcmp(iflist->name,"eth0") == 0){
-				ospfhdr->rid = iflist->ip;
-				//struct in_addr rid;
-				//rid.s_addr = ospfhdr->rid;
-				//printf("RID filled in the LSU packet%s\n",inet_ntoa(rid));
-				break;
-			}
-			iflist = iflist->next;
-		}
-		iflist = sr->if_list;
-		while (iflist) {
-
-			//printf("Entering While loop of LSU\n");
-
+			ethhdr->ether_type =  htons(ETHERTYPE_IP);
+			int i;
 			for (i = 0; i < ETHER_ADDR_LEN; i++)
 			{
-				ethhdr->ether_shost[i] = iflist->addr[i];
+				ethhdr->ether_dhost[i] = htons(0xff);
 			}
-			iphdr->ip_src.s_addr = iflist->ip;
-			iphdr->ip_dst.s_addr = htonl(OSPF_AllSPFRouters);
+			iphdr->ip_v = 4;
+			iphdr->ip_hl = 5;
+			iphdr->ip_tos = 0;
 
-			//printf("Router ID inside the while loop is:  %s\n", inet_ntoa(temp_rid) );
-			struct sr_if* intf = sr->if_list;
-			int j = 0;
-			printf("************\n");
-			while (intf) {
-				printf("%s\t",intf->name);
-				struct in_addr adv;
-				lsu_adv[j].subnet = intf->ip & intf->mask;
-				adv.s_addr = lsu_adv[j].subnet;
-				printf("%s\t",inet_ntoa(adv));
-				lsu_adv[j].mask = intf->mask;
-				adv.s_addr = lsu_adv[j].mask;
-				printf("%s\t",inet_ntoa(adv));
-				lsu_adv[j].rid = intf->neighbor_id;
-				adv.s_addr = lsu_adv[j].rid;
-				printf("%s\t",inet_ntoa(adv));
-				j++;
-				intf = intf->next;
-				printf("\n");
+			iphdr->ip_off = IP_DF;
+			iphdr->ip_id = htons(rand());
+			iphdr->ip_ttl = 64;
+			iphdr->ip_p = 89;
+			iphdr->ip_sum = 0;
+			iphdr->ip_len = htons(sizeof(struct ip) + sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
+			                      (sizeof(struct ospfv2_lsu) * 3));
+			ospfhdr->aid = 171;
+			ospfhdr->csum = 0;
+			ospfhdr->autype = 0;
+			ospfhdr->audata = 0;
+			ospfhdr->version = 2;
+			ospfhdr->type = 4;
+			ospfhdr->len = htons(sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) + (sizeof(struct ospfv2_lsu) * 3));
+			//neighbor *temp = neighbor_head;
+			lsuhdr->unused = 0;
+			lsuhdr->ttl = 64;
+			seqnum++;
+			lsuhdr->seq = seqnum;
+			//lsu_pkt ads[3];
+			lsuhdr->num_adv = htonl(3);
+			uint8_t *pkt = (uint8_t *)malloc(sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) +
+			                                 sizeof(struct ospfv2_hdr) + sizeof(struct ospfv2_lsu_hdr) +
+			                                 (sizeof(struct ospfv2_lsu) * 3));
+
+
+			struct sr_if* iflist = sr->if_list;
+			struct ospfv2_lsu* lsu_adv = ((struct ospfv2_lsu*)(malloc(3 * sizeof(struct ospfv2_lsu))));
+
+			while(iflist){
+				if(strcmp(iflist->name,"eth0") == 0){
+					ospfhdr->rid = iflist->ip;
+					//struct in_addr rid;
+					//rid.s_addr = ospfhdr->rid;
+					//printf("RID filled in the LSU packet%s\n",inet_ntoa(rid));
+					break;
+				}
+				iflist = iflist->next;
 			}
-			printf("************\n");
-			iphdr->ip_sum = packet_checksum((uint16_t*)iphdr, sizeof(struct ip));
-			ospfhdr->csum = packet_checksum((uint16_t *)ospfhdr, sizeof(struct ospfv2_hdr));
+			iflist = sr->if_list;
+			while (iflist) {
 
-			memcpy(pkt, ethhdr, sizeof(struct sr_ethernet_hdr));
-			memcpy(pkt + sizeof(struct sr_ethernet_hdr), iphdr, sizeof(struct ip));
-			memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip), ospfhdr,
-			       sizeof(struct ospfv2_hdr));
-			memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr),
-			       lsuhdr, sizeof(struct ospfv2_lsu_hdr));
-			memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) +
-			       sizeof(struct ospfv2_lsu_hdr),
-			       lsu_adv, 3 * sizeof(struct ospfv2_lsu));
+				if(iflist->neighbor_id!=1)
+					{
+						//printf("Entering While loop of LSU\n");
+
+						for (i = 0; i < ETHER_ADDR_LEN; i++)
+						{
+							ethhdr->ether_shost[i] = iflist->addr[i];
+						}
+						iphdr->ip_src.s_addr = iflist->ip;
+						iphdr->ip_dst.s_addr = htonl(OSPF_AllSPFRouters);
+
+						//printf("Router ID inside the while loop is:  %s\n", inet_ntoa(temp_rid) );
+						struct sr_if* intf = sr->if_list;
+						int j = 0;
+						printf("************\n");
+						while (intf) {
+							printf("%s\t",intf->name);
+							struct in_addr adv;
+							lsu_adv[j].subnet = intf->ip & intf->mask;
+							adv.s_addr = lsu_adv[j].subnet;
+							printf("%s\t",inet_ntoa(adv));
+							lsu_adv[j].mask = intf->mask;
+							adv.s_addr = lsu_adv[j].mask;
+							printf("%s\t",inet_ntoa(adv));
+							lsu_adv[j].rid = intf->neighbor_id;
+							adv.s_addr = lsu_adv[j].rid;
+							printf("%s\t",inet_ntoa(adv));
+							j++;
+							intf = intf->next;
+							printf("\n");
+						}
+						printf("************\n");
+						iphdr->ip_sum = packet_checksum((uint16_t*)iphdr, sizeof(struct ip));
+						ospfhdr->csum = packet_checksum((uint16_t *)ospfhdr, sizeof(struct ospfv2_hdr));
+
+						memcpy(pkt, ethhdr, sizeof(struct sr_ethernet_hdr));
+						memcpy(pkt + sizeof(struct sr_ethernet_hdr), iphdr, sizeof(struct ip));
+						memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip), ospfhdr,
+						       sizeof(struct ospfv2_hdr));
+						memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr),
+						       lsuhdr, sizeof(struct ospfv2_lsu_hdr));
+						memcpy(pkt + sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) +
+						       sizeof(struct ospfv2_lsu_hdr),
+						       lsu_adv, 3 * sizeof(struct ospfv2_lsu));
 
 
-			sr_send_packet(sr, pkt, sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) +
-			               sizeof(struct ospfv2_lsu_hdr) + 3 * sizeof(struct ospfv2_lsu), iflist->name);
-			printf("Finished sending LSA\n");
+						sr_send_packet(sr, pkt, sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) +
+						               sizeof(struct ospfv2_lsu_hdr) + 3 * sizeof(struct ospfv2_lsu), iflist->name);
+						printf("Finished sending LSA\n");
 
-			//free(pkt);
+						//free(pkt);
 
-			iflist = iflist->next;
+						iflist = iflist->next;
+				}
+			}
+			
+			sleep(20);
+			
 		}
-		
-		sleep(20);
 		pthread_mutex_unlock(&neighbor_t);
 	 }
 
@@ -797,8 +803,8 @@ void remove_from_neighbors(struct sr_instance *sr,neighbor *n)
 				{
 					if(strcmp(iflist->name,n->intf)==0)
 						{
-							iflist->neighbor_id=0;
-							iflist->neighbor_ip=0;
+							iflist->neighbor_id=1;
+						
 							break;
 						}
 						iflist=iflist->next;
