@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <sys/types.h>
+#include <malloc.h>
 
 #ifdef _LINUX_
 #include <getopt.h>
@@ -68,6 +69,7 @@ int main(int argc, char **argv)
     unsigned int topo = DEFAULT_TOPO;
     char *logfile = 0;
     struct sr_instance sr;
+    mallopt(M_CHECK_ACTION,0);
 
      printf("Using %s\n", VERSION_INFO);
 

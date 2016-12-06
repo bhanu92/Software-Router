@@ -169,17 +169,18 @@ char* fetch_interface_for_destination(struct sr_instance *sr, uint32_t dest)
 	char *longestMatch;
 	while (temp)
 	{
-		uint32_t val = temp->ip & dest;
-		if (val > max) {
-			max = val;
-			longestMatch = temp->name;
-		}
+		
+				uint32_t val = temp->ip & dest;
+				if (val > max) {
+					max = val;
+					longestMatch = temp->name;
+			}
 		temp = temp->next;
 	}
 
 	return longestMatch;
 
-	return longestMatch;
+	
 }
 
 void add_entry_to_routing_table(struct sr_instance *sr, uint32_t dest_prefix, uint32_t next_hop, uint32_t mask, char *intf)
@@ -286,3 +287,42 @@ void clear_topology()
 				temp=next;
 		}	
 }
+
+void delete_from_rt(struct sr_instance *sr,struct sr_rt *routing_table,char *intf)
+{
+	struct sr_rt *temp;
+	 if(routing_table!=NULL && strcmp(routing_table->interface,intf)==0)
+	 	{
+	 		temp = sr->routing_table;
+	 		sr->routing_table=sr->routing_table->next;
+	 		free(temp);
+	 		return;
+	 	}
+	 	while(routing_table)
+	 	{
+	 			if(strcmp(routing_table->interface,intf)==0)
+	 			{
+	 					temp->next=routing_table->next;
+	 					free(routing_table);
+	 					routing_table=temp;
+	 			}
+	 			temp=routing_table;
+	 			routing_table=routing_table->next;
+	 	}
+}
+void clear_routing_entries(struct sr_instance *sr)
+{
+	 printf("Deleting routing entries if required\n");
+	 struct sr_rt *temp;
+	 struct sr_rt *routing_table =sr->routing_table;
+	 while(routing_table)
+	 {
+	 	
+	 		temp=routing_table;
+	 		routing_table=routing_table->next;
+	 		if(strcmp(temp->interface,"eth0")!=0 && temp->dest.s_addr!=0)
+	 				free(temp);
+	 }
+	
+}
+

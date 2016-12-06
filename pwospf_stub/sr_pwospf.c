@@ -88,11 +88,12 @@ int pwospf_init(struct sr_instance* sr)
 void sr_monitor_neighors(void *arg)
 {
 	struct sr_instance *sr = (struct sr_instance *)arg;
+	sleep(3);
 	while (1)
 	{
-			sleep(25);
-			pthread_mutex_lock(&neighbor_t);
-			  printf("Acquired lock on monitoring neighbors..\n");
+				sleep(15);
+				//pthread_mutex_lock(&neighbor_t);
+			  printf("****Acquired lock on monitoring neighbors****\n");
 
 
 				neighbor *temp = neighbor_head;
@@ -102,23 +103,23 @@ void sr_monitor_neighors(void *arg)
 					time_t pkt_time = temp->rcv_time;
 					double diff = difftime(currTime, pkt_time);
 					printf("Diff is %f\n. OSPF timeout is %d\n",diff,OSPF_NEIGHBOR_TIMEOUT);
-					if (diff > OSPF_NEIGHBOR_TIMEOUT && temp->rid != 0)
+					if (diff > 20 && temp->rid != 0)
 					{
 						printf("Found neighbor down\n");
 						remove_from_neighbors(sr,temp);
+						
 						//send_lsu(sr,true);
 
 						printf("Time difference is %lf\n", diff);
 						printf("Neighbor is down\n");
 					}
-					temp = temp->next;
-				
-				
-				
+					temp = temp->next;					
 
-		}
-		printf("Releasing lock on neighbors..\n");
-		pthread_mutex_unlock(&neighbor_t);
+				}
+		
+		
+		//pthread_mutex_unlock(&neighbor_t);
+		printf("****Released lock on neighbors***\n");
 
 
 	}
@@ -180,7 +181,9 @@ void sr_send_hello(void* arg)
 	while (1)
 	{
 			
-			pthread_mutex_lock(&neighbor_t);
+			//pthread_mutex_lock(&neighbor_t);
+			
+				printf("\n****ENTERED SEND HELLO thread****\n");
 				struct sr_instance* sr = (struct sr_instance *)arg;
 				//printf("coming to hello\n");
 				struct sr_ethernet_hdr* ethhdr = ((struct sr_ethernet_hdr*)(malloc(sizeof(struct sr_ethernet_hdr))));
@@ -247,7 +250,7 @@ void sr_send_hello(void* arg)
 					iphdr->ip_sum = packet_checksum((uint16_t*)iphdr, sizeof(struct ip));
 
 					//ospfhdr->rid = iflist->ip;
-					printf("coming to hello\n");
+					printf("\n*****Sending hello through interface %s*****\n",iflist->name);
 					int i;
 					for (i = 0; i < ETHER_ADDR_LEN; i++)
 					{
@@ -275,12 +278,13 @@ void sr_send_hello(void* arg)
 					char *intf = iflist->name;
 					sr_send_packet(sr, pkt, (sizeof(struct sr_ethernet_hdr) + sizeof(ip_hdr) + sizeof(ospf_hdr) +
 					                         sizeof(hello_hdr) ), intf);
-					printf("finished\n\n\n\n");
+					//printf("finished\n\n\n\n");
 					free(pkt);
 					iflist = iflist->next;
 				}
-				pthread_mutex_unlock(&neighbor_t);
-				sleep(15);
+				//pthread_mutex_unlock(&neighbor_t);
+				printf("\n****EXITED SEND HELLO thread****\n");
+				sleep(5);
 			
 
 	}
@@ -292,14 +296,14 @@ void handle_ospf_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *i
 	ethernet_hdr *ethHdr = (ethernet_hdr *)packet;
 	ip_hdr *ipHdr = (ip_hdr*)(packet + sizeof(ethernet_hdr));
 	ospf_hdr *ospfHdr = (ospf_hdr*)(packet + sizeof(ethernet_hdr) + sizeof(ip_hdr));
-	printf("Entered handle_ospf_packet\n");
+	//printf("Entered handle_ospf_packet\n");
 	if (ospfHdr->type == 1)
 	{
-		printf("Received Hello packet\n");
+		//printf("Received Hello packet\n");
 		handle_hello_packet(sr, packet, iface);
 	}
 	else if (ospfHdr->type == 4) {
-		printf("Received LSU packet\n");
+		//printf("Received LSU packet\n");
 		handle_lsu_packet(sr, packet, iface);
 	}
 
@@ -320,7 +324,7 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *if
 {
 	assert(sr);
 	assert(packet);
-	printf("Entered handle LSU function");
+	//printf("Entered handle LSU function");
 	ethernet_hdr *ethHdr = (ethernet_hdr *)packet;
 	ip_hdr *ipHdr = (ip_hdr *)(packet + sizeof(ethernet_hdr));
 	ospf_hdr *ospfHdr = (ospf_hdr *)(packet + sizeof(ethernet_hdr) + sizeof(ip_hdr));
@@ -332,41 +336,42 @@ void handle_lsu_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *if
 
 	struct in_addr temp;
 	temp.s_addr = ipHdr->ip_src.s_addr;
-	printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
-	printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
-	clear_topology();
+	//printf("Sender address of IP packet %s\n", inet_ntoa(ipHdr->ip_src));
+	//printf("Destination address of IP packet %s\n", inet_ntoa(ipHdr->ip_dst));
+//	clear_topology();
+	//clear_routing_entries(sr);
 
 	for (i = 0; i < 3; i++)
 	{
 		
 		
 			temp.s_addr = ospfHdr->rid;
-			printf("RID : %s\n", inet_ntoa(temp));
+			//printf("RID : %s\n", inet_ntoa(temp));
 			temp.s_addr = ads[i].subnet;
-			printf("Subnet : %s\n", inet_ntoa(temp));
+			//printf("Subnet : %s\n", inet_ntoa(temp));
 			temp.s_addr = ads[i].mask;
-			printf("Mask : %s\n", inet_ntoa(temp));
+			//printf("Mask : %s\n", inet_ntoa(temp));
 			temp.s_addr = ads[i].rid;
-			printf("NID : %s\n", inet_ntoa(temp));
+			//printf("NID : %s\n", inet_ntoa(temp));
 			//temp.s_addr = ipHdr->ip_src.s_addr;
 			//printf("NIP : %s\n", inet_ntoa(ipHdr->ip_src));
-			printf("***************\n");
+			//printf("***************\n");
 
 			if (check_topology_entry(ospfHdr->rid, ads[i].subnet))
 			{
 				uint16_t seqNum = get_sequence_number(ospfHdr->rid, ipHdr->ip_src.s_addr);
 				if (seqNum <= seqnum)
 				{
-					printf("Sequence number is same as existing database. No update required\n");
+					//printf("Sequence number is same as existing database. No update required\n");
 				}
 				else
 				{
-					printf("Sequence number is greater. Will update\n");
+					//printf("Sequence number is greater. Will update\n");
 				}
 			}
 			else
 			{
-				printf("Adding entry to topology database\n");
+				//printf("Adding entry to topology database\n");
 				add_topology_entry(ospfHdr->rid, ads[i].subnet, ads[i].mask, ads[i].rid, ipHdr->ip_src.s_addr, lsuHdr->seq);
 			}
 		
@@ -401,6 +406,7 @@ void print_neighbors()
 
 void handle_hello_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *iface)
 {
+	//pthread_mutex_lock(&neighbor_t);
 	printf("Hello packet received through interface%s\n", iface->name);
 	ethernet_hdr *ethHdr = (ethernet_hdr *)packet;
 	ip_hdr *ipHdr = (ip_hdr*)(packet + sizeof(ethernet_hdr));
@@ -464,7 +470,7 @@ void handle_hello_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *
 			iflist = sr->if_list;
 			while (iflist) {
 				if (strcmp(iflist->name, iface->name) == 0) {
-					printf("Iflist->name%s\n", iflist->name );
+					//printf("Iflist->name%s\n", iflist->name );
 					iflist->neighbor_id = ospfHdr->rid;
 					iflist->neighbor_ip = ipHdr->ip_src.s_addr;
 					break;
@@ -484,7 +490,7 @@ void handle_hello_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *
 				}
 				temp = temp->next;
 			}
-			printf("Neighbor already exists\n");
+			//printf("Neighbor already exists\n");
 		}
 	}
 
@@ -497,10 +503,10 @@ void handle_hello_packet(struct sr_instance *sr, uint8_t *packet, struct sr_if *
 	}
 
 	if (count >= 1) {
-		sr_print_if_list(sr);
+		//sr_print_if_list(sr);
 		print_neighbors();
 	}
-
+	//pthread_mutex_unlock(&neighbor_t);
 	/*
 	if (count >= 2)
 	{
@@ -559,16 +565,18 @@ char* get_interface(struct sr_instance *sr, uint32_t ip)
 
 void sr_send_lsu(void* arg)
 {
+	sleep(10);
 	while (1)
 	{
-		sleep(20);
-		pthread_mutex_lock(&neighbor_t);
+		
+		//pthread_mutex_lock(&neighbor_t);
+		printf("\n*****ENTERED SEND LSU thread****\n");
 		if(neighbor_head)
 		{
 			
 			
 			int j;
-			printf("Sending LSU packet\n");
+			//printf("Sending LSU packet\n");
 			struct sr_instance *sr = (struct sr_instance*)arg;
 			struct sr_ethernet_hdr* ethhdr = ((struct sr_ethernet_hdr*)(malloc(sizeof(struct sr_ethernet_hdr))));
 			struct ip* iphdr = ((struct ip*)(malloc(sizeof(struct ip))));
@@ -658,7 +666,7 @@ void sr_send_lsu(void* arg)
 							intf = intf->next;
 							printf("\n");
 						}
-						printf("************\n");
+						//printf("************\n");
 						iphdr->ip_sum = packet_checksum((uint16_t*)iphdr, sizeof(struct ip));
 						ospfhdr->csum = packet_checksum((uint16_t *)ospfhdr, sizeof(struct ospfv2_hdr));
 
@@ -675,7 +683,7 @@ void sr_send_lsu(void* arg)
 
 						sr_send_packet(sr, pkt, sizeof(struct sr_ethernet_hdr) + sizeof(struct ip) + sizeof(struct ospfv2_hdr) +
 						               sizeof(struct ospfv2_lsu_hdr) + 3 * sizeof(struct ospfv2_lsu), iflist->name);
-						printf("Finished sending LSA\n");
+					//	printf("Finished sending LSA\n");
 
 						//free(pkt);
 
@@ -683,10 +691,13 @@ void sr_send_lsu(void* arg)
 				}
 			}
 			
-			sleep(20);
+			
 			
 		}
-		pthread_mutex_unlock(&neighbor_t);
+		
+		//pthread_mutex_unlock(&neighbor_t);
+		printf("\n******EXITED SEND LSU THREAD*****\n");
+		sleep(15);
 	 }
 
 
@@ -803,6 +814,7 @@ void remove_from_neighbors(struct sr_instance *sr,neighbor *n)
 				{
 					if(strcmp(iflist->name,n->intf)==0)
 						{
+							printf("Setting NID to 1\n");
 							iflist->neighbor_id=1;
 						
 							break;

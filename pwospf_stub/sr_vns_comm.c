@@ -552,7 +552,7 @@ sr_ether_addrs_match_interface( struct sr_instance* sr, /* borrowed */
         return 0;
     }
 
-    if ( memcmp( ether_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN) != 0 )
+    if (memcmp( ether_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN) != 0 )
     {
         fprintf( stderr, "** Error, source address does not match interface\n");
         return 0;
@@ -604,6 +604,9 @@ int sr_send_packet(struct sr_instance* sr /* borrowed */,
     sr_pkt->mLen  = htonl(total_len);
     sr_pkt->mType = htonl(VNSPACKET);
     strncpy(sr_pkt->mInterfaceName,iface,16);
+  //  sr_pkt->mInterfaceName[4]='\0';
+   
+   
     memcpy(((uint8_t*)sr_pkt) + sizeof(c_packet_header),
             buf,len);
 
