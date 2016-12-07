@@ -517,7 +517,9 @@ int sr_read_from_server_expect(struct sr_instance* sr /* borrowed */, int expect
     }/* -- switch -- */
 
     if(buf)
-    { free(buf); }
+    { 
+    	//free(buf); 
+    }
     return ret;
 }/* -- sr_read_from_server -- */
 

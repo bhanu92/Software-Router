@@ -25,6 +25,7 @@
 #include <pwd.h>
 #include <sys/types.h>
 #include <malloc.h>
+#include <signal.h>
 
 #ifdef _LINUX_
 #include <getopt.h>
@@ -55,6 +56,14 @@ static void sr_load_rt_wrap(struct sr_instance* sr, char* rtable);
 
 /*-----------------------------------------------------------------------------
  *---------------------------------------------------------------------------*/
+ 
+ void segfault_sigaction(int signal, siginfo_t *si, void *arg)
+{
+    printf("Caught segfault at address %p\n", si->si_addr);
+   // exit(0);
+}
+
+
 
 int main(int argc, char **argv)
 {
@@ -70,7 +79,9 @@ int main(int argc, char **argv)
     char *logfile = 0;
     struct sr_instance sr;
     mallopt(M_CHECK_ACTION,0);
+    
 
+  
      printf("Using %s\n", VERSION_INFO);
 
      while ((c = getopt(argc, argv, "ha:s:v:p:u:t:r:l:T:")) != EOF)

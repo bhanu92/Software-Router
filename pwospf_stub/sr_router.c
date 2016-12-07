@@ -608,8 +608,8 @@ void sr_send_icmp(struct sr_instance * sr, uint8_t* packet, unsigned int len, ui
 	memcpy(icmp_data, recv_ipHdr, 28);
 	new_icmp(send_icmpHdr, type, code, 36);
 	new_ip(send_ipHdr, 70 - 14, IP_DF, 64, IPPROTO_ICMP, sr_get_interface(sr, "eth0")->ip, recv_ipHdr->ip_src.s_addr);
-	memcpy(send_ethHdr->ether_shost, recv_etherHdr->ether_dhost, sizeof(send_ethHdr->ether_shost));
-	memcpy(send_ethHdr->ether_dhost, recv_etherHdr->ether_shost , sizeof(send_ethHdr->ether_dhost));
+	memcpy(send_ethHdr->ether_shost, recv_etherHdr->ether_dhost, 6);
+	memcpy(send_ethHdr->ether_dhost, recv_etherHdr->ether_shost , 6);
 
 	sr_send_packet(sr, icmpPacket, 70, "eth0");
 
@@ -676,7 +676,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			}
 			temp = temp->next;
 		}
-		memcpy(ethHdr->ether_dhost, mac_addr, sizeof(ethHdr->ether_dhost));
+		memcpy(ethHdr->ether_dhost, mac_addr, 6);
 		DebugMAC(mac_addr);
 		printf("\n");
 		//DebugMAC(ethHdr->ether_dhost);
@@ -751,7 +751,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			}
 			temp = temp->next;
 		}
-		memcpy(ethHdr->ether_dhost, mac_addr, sizeof(ethHdr->ether_dhost));
+		memcpy(ethHdr->ether_dhost, mac_addr, 6);
 		DebugMAC(mac_addr);
 		printf("\n");
 		struct sr_if* req_iface = sr->if_list;
@@ -830,8 +830,8 @@ void sr_arp_reply(struct sr_instance * sr, uint8_t * packet, unsigned int len, c
 	struct sr_arphdr *arpReply = (struct sr_arphdr*)(packet + sizeof(struct sr_ethernet_hdr));
 	struct sr_if *if_sender = sr_get_interface(sr, interface);
 
-	memcpy(ethHdr->ether_dhost, ethHdr->ether_shost, sizeof(ethHdr->ether_dhost)); // setting destination mac address
-	memcpy(ethHdr->ether_shost, if_sender->addr, sizeof(ethHdr->ether_shost));     // setting source mac address
+	memcpy(ethHdr->ether_dhost, ethHdr->ether_shost, 6); // setting destination mac address
+	memcpy(ethHdr->ether_shost, if_sender->addr, 6);     // setting source mac address
 
 	ethHdr->ether_type = htons(ETHERTYPE_ARP); //setting the type in ethernet header
 	arpReply->ar_hrd = htons(ARPHDR_ETHER); //setting the type of physical network
@@ -840,8 +840,8 @@ void sr_arp_reply(struct sr_instance * sr, uint8_t * packet, unsigned int len, c
 	arpReply->ar_pln = 4;    //setting length of IP address
 	arpReply->ar_op = htons(ARP_REPLY); // setting op-code
 
-	memcpy(arpReply->ar_tha, arpReply->ar_sha, sizeof(arpReply->ar_tha)); //setting target mac address in arp header
-	memcpy(arpReply->ar_sha, if_sender->addr, sizeof(arpReply->ar_sha)); //settig source mac address in arp header
+	memcpy(arpReply->ar_tha, arpReply->ar_sha, 6); //setting target mac address in arp header
+	memcpy(arpReply->ar_sha, if_sender->addr, 6); //settig source mac address in arp header
 	//memcpy(arpReply->arp_sip, arpReply->arp_tip, sizeof(arpReply->arp_sip));
 
 	temp_ip = arpReply->ar_sip;
@@ -920,7 +920,7 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 				arpHdr->ar_sha[i] = req_iface->addr[i];
 			}
 
-			memcpy(ethHdr->ether_shost, req_iface->addr, sizeof(req_iface->addr));
+			memcpy(ethHdr->ether_shost, req_iface->addr, 6);
 			arpHdr->ar_sip = req_iface->ip;
 			struct in_addr temp;
 			temp.s_addr = arpHdr->ar_tip;
