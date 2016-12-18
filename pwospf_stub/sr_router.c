@@ -60,7 +60,7 @@ uint16_t packet_checksum(uint16_t* addr, int count);
 void sr_route_packet(struct sr_instance* sr, uint8_t* packet, int len, char* interface, char *srcInterface);
 void send_default_route(uint8_t *packet, struct sr_instance *sr, int len);
 void print_interface(struct sr_rt *rt);
-void sr_send_icmp(struct sr_instance* sr, uint8_t* packet, unsigned int len, uint8_t type, uint8_t code, char* interface);
+void sr_send_icmp(struct sr_instance* sr, uint8_t* packet, unsigned int len, uint8_t type, uint8_t code);
 void dequeue();
 unsigned char* get_mac_addr_cache(uint32_t ipAddr);
 
@@ -565,7 +565,7 @@ void sr_handlepacket(struct sr_instance * sr,
 			while (interfs) {
 				if (interfs->ip == ipHdr->ip_dst.s_addr) {
 					printf("UDP or TCP Packet to the router");
-					sr_send_icmp(sr, packet, len, 3, 3, interface);
+					sr_send_icmp(sr, packet, len, 3, 3);
 					return;
 				}
 
@@ -575,7 +575,7 @@ void sr_handlepacket(struct sr_instance * sr,
 
 		if (ipHdr->ip_ttl <= 1) {
 			printf("\nReceived message with TTL<=1\n");
-			sr_send_icmp(sr, packet, len, 11, 0, interface);
+			sr_send_icmp(sr, packet, len, 11, 0);
 			return;
 		}
 
@@ -594,7 +594,7 @@ void sr_handlepacket(struct sr_instance * sr,
 }/* end sr_ForwardPacket */
 
 
-void sr_send_icmp(struct sr_instance * sr, uint8_t* packet, unsigned int len, uint8_t type, uint8_t code, char* interface) {
+void sr_send_icmp(struct sr_instance * sr, uint8_t* packet, unsigned int len, uint8_t type, uint8_t code) {
 
 	assert(sr);
 	assert(packet);
@@ -619,11 +619,11 @@ void sr_send_icmp(struct sr_instance * sr, uint8_t* packet, unsigned int len, ui
 
 	memcpy(icmp_data, recv_ipHdr, 28);
 	new_icmp(send_icmpHdr, type, code, 36);
-	new_ip(send_ipHdr, 70 - 14, IP_DF, 64, IPPROTO_ICMP, sr_get_interface(sr, interface)->ip, recv_ipHdr->ip_src.s_addr);
+	new_ip(send_ipHdr, 70 - 14, IP_DF, 64, IPPROTO_ICMP, sr_get_interface(sr, "eth0")->ip, recv_ipHdr->ip_src.s_addr);
 	memcpy(send_ethHdr->ether_shost, recv_etherHdr->ether_dhost, 6);
 	memcpy(send_ethHdr->ether_dhost, recv_etherHdr->ether_shost , 6);
 
-	sr_send_packet(sr, icmpPacket, 70, interface);
+	sr_send_packet(sr, icmpPacket, 70, "eth0");
 
 	printf("******************************************\n");
 	printf("Destination MAC address of ICMP packet %s\n", ether_ntoa(send_ethHdr->ether_dhost));
@@ -671,7 +671,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			printf("UDP packet for traceroute\n");
 			//printf("TTL is %d\n", ipHdr->ip_ttl);
 			if (ipHdr->ip_ttl == 0) {
-				sr_send_icmp(sr, packet, len, ICMP_TIME_EXCEEDED_TYPE, 0, interface);
+				sr_send_icmp(sr, packet, len, ICMP_TIME_EXCEEDED_TYPE, 0);
 				return;
 			}
 
@@ -746,7 +746,7 @@ void sr_route_packet(struct sr_instance * sr, uint8_t* packet, int len, char* in
 			printf("UDP packet for traceroute\n");
 			//printf("TTL is %d\n", ipHdr->ip_ttl);
 			if (ipHdr->ip_ttl == 0) {
-				sr_send_icmp(sr, packet, len, ICMP_TIME_EXCEEDED_TYPE, 0, interface);
+				sr_send_icmp(sr, packet, len, ICMP_TIME_EXCEEDED_TYPE, 0);
 				return;
 			}
 
@@ -888,7 +888,7 @@ void sr_arp_request(struct sr_instance * sr, uint8_t* pkt, char* interface, uint
 
 	if (arp_request_count > 5 && temp_ip != NULL && temp_ip->ip_p != 17 ) {
 		dequeue();
-		sr_send_icmp(sr, pkt, length , 3, 1, interface);
+		sr_send_icmp(sr, pkt, length , 3, 1);
 		arp_request_count = 0;
 		return;
 	}
